@@ -41,7 +41,14 @@ function supabaseDb(base, key) {
     loadState: async () => { const r = (await req('GET', 'state?id=eq.1&select=*'))[0]; if (!r) return null; return r.data ? { ...r.data, id: 1 } : r; },
     saveState: s => { const { id, updated_at, data, ...rest } = s; return upsert('state', [{ id: 1, data: rest, updated_at: new Date().toISOString() }], 'id'); },
     loadTraders: () => req('GET', 'traders?select=*&order=joined_at.asc'),
-    upsertTraders: rows => upsert('traders', rows, 'id'),
+    // Postgres controleert verplichte velden (naam, rol, ...) vóórdat hij ziet dat de trader al bestaat.
+    // Een update met alleen de tellers zou dus mislukken: eerst samenvoegen met de bestaande rij.
+    upsertTraders: async rows => {
+      if (!rows.length) return [];
+      const ids = [...new Set(rows.map(r => r.id))].map(i => `"${String(i).replace(/"/g, '')}"`).join(',');
+      const bestaand = new Map((await req('GET', `traders?select=*&id=in.(${encodeURIComponent(ids)})`)).map(r => [r.id, r]));
+      return upsert('traders', rows.map(r => ({ ...(bestaand.get(r.id) || {}), ...r })), 'id');
+    },
     loadMarket: () => req('GET', 'market?select=*'),
     upsertMarket: rows => upsert('market', rows, 'symbol'),
     recentRounds: n => req('GET', `rounds?select=no,started_at,proposal,outcome,votes_for&status=eq.klaar&order=id.desc&limit=${n}`),

@@ -37,8 +37,9 @@ export async function vraagJson(prompt, { maxTokens = 2500, temperature = 0.8, v
       try { return parseJson(tekst); }
       catch (e) {
         // afgekapt (te weinig ruimte)? dan opnieuw met meer ruimte; anders Claude laten verbeteren
-        if (j.stop_reason === 'max_tokens') { tokens = Math.min(Math.round(tokens * 1.6), 8000); herstel = null; }
+        if (j.stop_reason === 'max_tokens' || !tekst.trim()) { tokens = Math.min(Math.max(tokens * 2, tokens + 800), 8000); herstel = null; }
         else herstel = { tekst, fout: e.message.slice(0, 120) };
+        e.message += ` [stop: ${j.stop_reason}, ${u.output_tokens ?? '?'} tokens, inhoud: ${(j.content || []).map(c => c.type).join('+') || 'leeg'}]`;
         throw e;
       }
     } catch (e) {

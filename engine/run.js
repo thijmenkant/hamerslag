@@ -166,7 +166,7 @@ export async function ronde({ db = maakDb(), bronnen = verzamelBronnen, llm = ll
       const naamVan = id => actief.find(t => t.id === id)?.name || id;
       const zegEva = async moment => {
         let b = null;
-        try { b = controleerEva(await llm.vraagJson(evaPrompt(goedeBeurten, actief, { moment }), { maxTokens: 300, temperature: 0.5, vastDeel: vastDebat, model: evaModel }), actief, pakket); }
+        try { b = controleerEva(await llm.vraagJson(evaPrompt(goedeBeurten, actief, { moment }), { maxTokens: 700, temperature: 0.5, vastDeel: vastDebat, model: evaModel }), actief, pakket); }
         catch (e) { log('⚠ voorzitter mislukt:', e.message); }
         if (!b && moment !== 'ingreep') b = { id: 'voorzitter', tekst: moment === 'open' ? `Ik open het debat over ${voorstel.actie} €${voorstel.bedrag} ${voorstel.asset}. ${naamVan(voorstel.door)}, u heeft het woord.` : 'Ik dank de leden. De beraadslaging is gesloten.', bronnen: [], emotie: 'zeker', woord: moment === 'open' ? [voorstel.door] : [] };
         if (!b) return [];
@@ -221,7 +221,7 @@ export async function ronde({ db = maakDb(), bronnen = verzamelBronnen, llm = ll
       const vast = stemPromptEnkel(ctxStem, voorstel, goedeBeurten, actief, { name: '', role: '', style: '' }).split('TAAK 3')[0];
       // Elke trader stemt met zijn eigen model (4 verschillende breinen). In de spaarstand worden Opus en Fable Sonnet.
       const modelVan = t => { let k = t.model || START_MODEL[t.id] || 'haiku'; if (spaarstand && (k === 'opus' || k === 'fable')) k = 'sonnet'; return k; };
-      const losse = await Promise.all(actief.map(t => llm.vraagJson(stemPromptEnkel(ctxStem, voorstel, goedeBeurten, actief, t).slice(vast.length), { maxTokens: 200, vastDeel: vast, model: MODELLEN[modelVan(t)].id })
+      const losse = await Promise.all(actief.map(t => llm.vraagJson(stemPromptEnkel(ctxStem, voorstel, goedeBeurten, actief, t).slice(vast.length), { maxTokens: 700, vastDeel: vast, model: MODELLEN[modelVan(t)].id })
         .then(r => ({ ...r, id: t.id })).catch(e => { log(`⚠ stem ${t.id} (${modelVan(t)}) mislukt: ${e.message}`); return { id: t.id }; })));
       const stemmen = controleerStemmen({ stemmen: losse }, actief, pakket);
       stemmen.forEach(s => telBronnen(s.id, s.bronnen));
