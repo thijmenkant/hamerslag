@@ -1,0 +1,20 @@
+name: Hamerslag wakker houden
+# GitHub zet geplande taken in publieke repos stil na 60 dagen zonder activiteit.
+# Deze taak zet één keer per maand een lege commit, zodat de uurcheck en de nieuwsreflex blijven draaien.
+on:
+  schedule:
+    - cron: '17 6 1 * *'      # de 1e van elke maand
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  wakker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lege commit
+        run: |
+          git config user.name "hamerslag-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit --allow-empty -m "Maandelijkse keepalive (zodat GitHub de geplande taken niet stilzet)"
+          git push

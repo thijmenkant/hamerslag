@@ -371,7 +371,8 @@ function renderMarktView() {
     <div class="seg" id="mfilter" style="margin:10px 0 8px"></div>
     <div class="catchips" id="mcat"></div>
     <div class="sorts" id="msort"></div>
-    <div class="card" id="mlijst"></div>`;
+    <div class="card" id="mlijst"></div>
+    <p class="bronvermelding">Cryptokoersen: data provided by <a href="https://www.coingecko.com" target="_blank" rel="noopener">CoinGecko</a>. Aandelen: Finnhub en Financial Modeling Prep.</p>`;
     $('#mzoek').addEventListener('input', e => { marktZoek = e.target.value; tekenMarktLijst(); });
   }
   tekenMarktLijst();
@@ -634,7 +635,8 @@ function renderBronnen() {
       <div class="br-m"><b>${esc(b.naam)}</b><span>${esc(b.wat)}</span><small>${ELK[b.elk]} · ${b.sleutel ? 'gratis sleutel' : 'geen sleutel'}</small></div>
       <div class="br-s ${l.kleur}"><b>${esc(l.tekst)}</b>${s?.t && l.kleur !== 'grijs' ? `<span>${tijd(s.t)}${s.aantal != null ? ' · ' + s.aantal : ''}</span>` : ''}</div></a>`).join('')}
   </div>`).join('')}
-  </div></div>`;
+  </div></div>
+  <p class="bronvermelding">Cryptokoersen: data provided by <a href="https://www.coingecko.com" target="_blank" rel="noopener">CoinGecko</a>. This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.</p>`;
 }
 
 // ---------- start ----------

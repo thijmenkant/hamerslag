@@ -323,3 +323,5 @@ body.inzaal .screenstat{bottom:calc(32vh + 96px)}
 .br-s{text-align:right;flex:none;max-width:42%}.br-s b{display:block;font-size:12.5px}.br-s span{display:block;font-size:11px;color:var(--mut2)}
 .br-s.groen b{color:#059669}.br-s.oranje b{color:#B45309}.br-s.rood b{color:var(--red)}.br-s.grijs b{color:var(--mut)}
 @media (max-width:420px){nav.tabs a{width:60px;font-size:10px}}
+
+.bronvermelding{font-size:11.5px;color:var(--mut2);margin:6px 4px 0;line-height:1.5}.bronvermelding a{color:var(--mut)}
