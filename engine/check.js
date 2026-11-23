@@ -65,14 +65,21 @@ export async function controle({ fetchFn = fetch, log = console.log } = {}) {
   // 4. Supabase: tabellen, nieuwe kolommen en aanmelden dicht
   const sb = env('SUPABASE_URL')?.replace(/\/$/, ''), sk = env('SUPABASE_SERVICE_KEY');
   if (sb && sk) {
-    const h = { apikey: sk, Authorization: `Bearer ${sk}` };
+    const h = { apikey: sk, ...(String(sk).startsWith('sb_') ? {} : { Authorization: `Bearer ${sk}` }) };
+    // Welke sleutel is het? (alleen het soort, nooit de sleutel zelf tonen)
+    let soort = 'onbekend';
+    if (String(sk).startsWith('sb_secret_')) soort = 'secret';
+    else if (String(sk).startsWith('sb_publishable_')) soort = 'publishable';
+    else { try { soort = JSON.parse(Buffer.from(String(sk).split('.')[1], 'base64url').toString()).role || 'onbekend'; } catch {} }
+    if (soort === 'anon' || soort === 'publishable') fout(`SUPABASE_SERVICE_KEY is de ${soort === 'anon' ? 'anon' : 'publishable'}-sleutel (de publieke)`, 'plak de service_role-sleutel: Supabase → Project Settings → API Keys → Legacy → service_role → Reveal → kopiëren');
+    else if (soort === 'onbekend') let_op('SUPABASE_SERVICE_KEY lijkt geen Supabase-sleutel', 'kopieer hem opnieuw: Supabase → Project Settings → API Keys → Legacy → service_role → Reveal');
     let schemaFout = false;
     for (const [t, kol] of Object.entries(TABELLEN)) {
       try {
         const r = await haal(`${sb}/rest/v1/${t}?select=${kol}&limit=1`, { headers: h });
         if (r.ok) continue;
         schemaFout = true;
-        if (r.status === 401 || r.status === 403) { fout('Supabase-sleutel wordt geweigerd', 'gebruik de service_role key (Project Settings → API), niet de anon key'); break; }
+        if (r.status === 401 || r.status === 403) { fout(`Supabase-sleutel wordt geweigerd (soort: ${soort})`, `${(r.json?.message || r.tekst || '').toString().slice(0, 120)} → gebruik de service_role key (Project Settings → API Keys → Legacy)`); break; }
         fout(`Supabase: tabel "${t}" mist of is verouderd (${(r.json?.message || r.tekst).slice(0, 90)})`, 'plak supabase/schema.sql opnieuw in Supabase → SQL Editor → Run (veilig: bestaande data blijft)');
       } catch (e) { fout('Supabase: geen verbinding', `controleer SUPABASE_URL (${e.message})`); schemaFout = true; break; }
     }

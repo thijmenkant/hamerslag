@@ -10,7 +10,7 @@ export function maakDb() {
 }
 
 function supabaseDb(base, key) {
-  const headers = { apikey: key, Authorization: `Bearer ${key}`, 'content-type': 'application/json' };
+  const headers = { apikey: key, ...(String(key).startsWith('sb_') ? {} : { Authorization: `Bearer ${key}` }), 'content-type': 'application/json' };
   async function req(method, path, body, prefer) {
     const r = await fetch(`${base}/rest/v1/${path}`, {
       method, headers: { ...headers, ...(prefer ? { Prefer: prefer } : {}) },
