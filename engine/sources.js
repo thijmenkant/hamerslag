@@ -233,7 +233,9 @@ export async function haalKoersen({ usdEur = 0.93, bezit = [], fouten = [], stoc
         const q = await veilig(`FMP reserve ${s}`, () => fetchFmpQuote(s, usdEur));
         if (q) { const a = vindAsset(s); stocksLijst.push({ sym: s, naam: a.naam, soort: a.soort, rank: a.rank, prijs: q.prijs, chg24h: q.chg24h, tijd: new Date().toISOString(), bron: 'Financial Modeling Prep', url: `https://financialmodelingprep.com/financial-summary/${s}` }); gevuld++; }
       }
-      meld('fmp', gevuld > 0, gevuld ? { aantal: `${gevuld} reservekoersen` } : { melding: `reserve gaf geen koers voor ${belangrijk.join(', ')}`.slice(0, 160) });
+      // 402 = dit fonds zit niet in het gratis FMP-pakket: dat is geen storing, dus geen rood lampje
+      const alleenPakket = !gevuld && belangrijk.every(s => fouten.some(f => f.startsWith(`FMP reserve ${s}: 402`)));
+      if (!alleenPakket) meld('fmp', gevuld > 0, gevuld ? { aantal: `${gevuld} reservekoersen` } : { melding: `reserve gaf geen koers voor ${belangrijk.join(', ')}`.slice(0, 160) });
       if (gevuld) fouten.push(`Finnhub miste ${belangrijk.length} belangrijke koersen: ${gevuld} aangevuld via Financial Modeling Prep`);
     }
   }
