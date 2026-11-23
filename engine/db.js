@@ -1,0 +1,76 @@
+// Opslag in Supabase via de REST-API (geen extra pakketten nodig).
+// Voor testen is er een geheugen-versie met precies dezelfde functies.
+
+import { env } from './config.js';
+
+export function maakDb() {
+  const url = env('SUPABASE_URL'), key = env('SUPABASE_SERVICE_KEY');
+  if (env('DRY_RUN') === '1' || !url || !key) return geheugenDb();
+  return supabaseDb(url.replace(/\/$/, ''), key);
+}
+
+function supabaseDb(base, key) {
+  const headers = { apikey: key, Authorization: `Bearer ${key}`, 'content-type': 'application/json' };
+  async function req(method, path, body, prefer) {
+    const r = await fetch(`${base}/rest/v1/${path}`, {
+      method, headers: { ...headers, ...(prefer ? { Prefer: prefer } : {}) },
+      body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(20000),
+    });
+    const t = await r.text();
+    if (!r.ok) throw new Error(`Supabase ${method} ${path.split('?')[0]}: ${r.status} ${t.slice(0, 200)}`);
+    return t ? JSON.parse(t) : null;
+  }
+  // Supabase (PostgREST) eist dat alle rijen in één aanvraag precies dezelfde velden hebben.
+  // Daarom groeperen we rijen met dezelfde velden en sturen we elke groep apart (volgorde blijft gelijk).
+  const groepen = rows => { const g = []; for (const r of rows) { const k = Object.keys(r).sort().join(','); const laatste = g.at(-1); laatste && laatste.k === k ? laatste.rows.push(r) : g.push({ k, rows: [r] }); } return g; };
+  const insert = async (tabel, rows) => { const uit = []; for (const g of groepen(rows)) uit.push(...(await req('POST', tabel, g.rows, 'return=representation'))); return uit; };
+  const upsert = async (tabel, rows, op) => { const uit = []; for (const g of groepen(rows)) uit.push(...(await req('POST', `${tabel}?on_conflict=${op}`, g.rows, 'resolution=merge-duplicates,return=representation'))); return uit; };
+  return {
+    soort: 'supabase',
+    // De hele toestand staat in één jsonb-kolom 'data': zo past elk nieuw veld (kosten, pot, dividend, ...) er altijd in.
+    loadState: async () => { const r = (await req('GET', 'state?id=eq.1&select=*'))[0]; if (!r) return null; return r.data ? { ...r.data, id: 1 } : r; },
+    saveState: s => { const { id, updated_at, data, ...rest } = s; return upsert('state', [{ id: 1, data: rest, updated_at: new Date().toISOString() }], 'id'); },
+    loadTraders: () => req('GET', 'traders?select=*&order=joined_at.asc'),
+    upsertTraders: rows => upsert('traders', rows, 'id'),
+    loadMarket: () => req('GET', 'market?select=*'),
+    upsertMarket: rows => upsert('market', rows, 'symbol'),
+    recentRounds: n => req('GET', `rounds?select=no,started_at,proposal,outcome,votes_for&status=eq.klaar&order=id.desc&limit=${n}`),
+    lastRoundNo: async () => (await req('GET', 'rounds?select=no&order=id.desc&limit=1'))[0]?.no || 0,
+    createRound: async row => (await insert('rounds', [row]))[0],
+    updateRound: (id, patch) => req('PATCH', `rounds?id=eq.${id}`, patch, 'return=minimal'),
+    insertSources: rows => rows.length ? insert('sources', rows) : [],
+    insertMessages: rows => rows.length ? insert('messages', rows) : [],
+    insertTrade: row => insert('trades', [row]),
+    insertSnapshot: row => insert('snapshots', [row]),
+    insertHeadlines: rows => rows.length ? upsert('headlines', rows, 'url') : [],
+    bekendeUrls: async urls => { if (!urls.length) return new Set(); const lijst = urls.map(u => `"${u.replace(/"/g, '')}"`).join(','); return new Set((await req('GET', `headlines?select=url&url=in.(${encodeURIComponent(lijst)})`)).map(r => r.url)); },
+    laatsteRondes: () => req('GET', 'rounds?select=id,started_at,spoed,status&order=id.desc&limit=30'),
+    insertVoorzitting: row => insert('voorzittingen', [row]),
+  };
+}
+
+export function geheugenDb() {
+  const d = { state: null, traders: [], market: [], rounds: [], sources: [], messages: [], trades: [], snapshots: [], headlines: [], voorzittingen: [] };
+  let rid = 0;
+  return {
+    soort: 'geheugen', data: d,
+    loadState: async () => d.state && structuredClone(d.state),
+    saveState: async s => { d.state = structuredClone(s); },
+    loadTraders: async () => structuredClone(d.traders),
+    upsertTraders: async rows => { for (const r of rows) { const i = d.traders.findIndex(t => t.id === r.id); i >= 0 ? (d.traders[i] = { ...d.traders[i], ...r }) : d.traders.push({ joined_at: new Date().toISOString(), active: true, ...r }); } },
+    loadMarket: async () => structuredClone(d.market),
+    upsertMarket: async rows => { for (const r of rows) { const i = d.market.findIndex(m => m.symbol === r.symbol); i >= 0 ? (d.market[i] = r) : d.market.push(r); } },
+    recentRounds: async n => d.rounds.filter(r => r.status === 'klaar').slice(-n).reverse(),
+    lastRoundNo: async () => d.rounds.at(-1)?.no || 0,
+    createRound: async row => { const r = { id: ++rid, ...row }; d.rounds.push(r); return r; },
+    updateRound: async (id, patch) => { Object.assign(d.rounds.find(r => r.id === id), patch); },
+    insertSources: async rows => { d.sources.push(...rows); },
+    insertMessages: async rows => { d.messages.push(...rows); },
+    insertTrade: async row => { d.trades.push(row); },
+    insertSnapshot: async row => { d.snapshots.push(row); },
+    insertHeadlines: async rows => { d.headlines.push(...rows); },
+    bekendeUrls: async urls => new Set(d.headlines.map(h => h.url).filter(u => urls.includes(u))),
+    laatsteRondes: async () => d.rounds.slice(-30).reverse(),
+    insertVoorzitting: async row => { d.voorzittingen.push(row); },
+  };
+}

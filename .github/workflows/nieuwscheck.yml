@@ -1,0 +1,48 @@
+name: Hamerslag nieuwsreflex
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'     # elke 5 minuten: is er groot nieuws? (kost geen AI)
+  workflow_dispatch:
+
+concurrency:
+  group: parlement-nieuws     # eigen groep: anders annuleert de ene workflow de wachtende van de andere
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Nieuws controleren
+        working-directory: engine
+        run: node nieuwscheck.js
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          COINGECKO_KEY: ${{ secrets.COINGECKO_KEY }}
+          FINNHUB_KEY: ${{ secrets.FINNHUB_KEY }}
+          FMP_KEY: ${{ secrets.FMP_KEY }}
+          FRED_KEY: ${{ secrets.FRED_KEY }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-haiku-5-5' }}
+          BUDGET_EUR: ${{ vars.BUDGET_EUR || '50' }}
+          MODEL_HAIKU: ${{ vars.MODEL_HAIKU }}
+          MODEL_SONNET: ${{ vars.MODEL_SONNET }}
+          MODEL_OPUS: ${{ vars.MODEL_OPUS }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          APP_URL: ${{ vars.APP_URL }}
+          SEC_CONTACT: ${{ vars.SEC_CONTACT }}
+      - name: Melding als het misgaat
+        if: failure()
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: |
+          if [ -n "$NTFY_TOPIC" ]; then
+            curl -s -H "Title: Hamerslag: workflow mislukt" -H "Priority: 5" -H "Tags: x" \
+              -d "De GitHub-workflow '${{ github.workflow }}' is mislukt. Kijk bij Actions in je repository." "https://ntfy.sh/$NTFY_TOPIC" || true
+          fi

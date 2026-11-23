@@ -1,0 +1,33 @@
+name: Hamerslag controle
+
+# Controleert alle sleutels en verbindingen en stuurt een testmelding.
+# Actions → "Hamerslag controle" → Run workflow. Kost een fractie van een cent.
+on:
+  workflow_dispatch:
+
+jobs:
+  controle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Controle van de installatie
+        working-directory: engine
+        run: node check.js
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          COINGECKO_KEY: ${{ secrets.COINGECKO_KEY }}
+          FINNHUB_KEY: ${{ secrets.FINNHUB_KEY }}
+          FMP_KEY: ${{ secrets.FMP_KEY }}
+          FRED_KEY: ${{ secrets.FRED_KEY }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          APP_URL: ${{ vars.APP_URL }}
+          SEC_CONTACT: ${{ vars.SEC_CONTACT }}
+          MODEL_HAIKU: ${{ vars.MODEL_HAIKU }}
+          MODEL_SONNET: ${{ vars.MODEL_SONNET }}
+          MODEL_OPUS: ${{ vars.MODEL_OPUS }}

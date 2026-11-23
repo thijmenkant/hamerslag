@@ -1,0 +1,12 @@
+{
+  "name": "ai-parlement-engine",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "De motor van Hamerslag: haalt bronnen op, laat 10 AI-traders debatteren en stemmen, en voert nep-trades uit.",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "ronde": "node run.js",
+    "test": "node test/dry-run.js"
+  }
+}

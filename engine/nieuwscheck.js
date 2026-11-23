@@ -1,0 +1,43 @@
+// Nieuwsreflex: draait elke 5 minuten, kost geen AI.
+// Is er vers, groot nieuws over iets wat wij volgen? Dan direct een spoeddebat.
+
+import { SPOED, ZITTING } from './config.js';
+import { fetchNews } from './sources.js';
+import { maakDb } from './db.js';
+import { ronde } from './run.js';
+
+const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
+
+export async function nieuwscheck({ db = maakDb(), nieuws = () => fetchNews({ maxUren: 3, max: 60 }), start = ronde, nu = new Date() } = {}) {
+  const lijst = await nieuws();
+  const grens = nu.getTime() - SPOED.maxLeeftijdMin * 60000;
+  let kandidaten = lijst.filter(n => n.belang >= SPOED.drempel && n.assets.length && new Date(n.tijd).getTime() >= grens);
+  if (!kandidaten.length) { log(`nieuwscheck: ${lijst.length} berichten, niets groots`); return { gestart: false, reden: 'geen groot nieuws' }; }
+
+  const bekend = await db.bekendeUrls(kandidaten.map(n => n.url).filter(Boolean));
+  kandidaten = kandidaten.filter(n => !bekend.has(n.url));
+  if (!kandidaten.length) { log('nieuwscheck: groot nieuws is al besproken'); return { gestart: false, reden: 'al besproken' }; }
+
+  // Tweede bron nodig: een andere uitgever moet over dezelfde asset berichten (laatste 3 uur)
+  const bevestigd = n => lijst.some(m => m !== n && m.uitgever !== n.uitgever && m.assets.some(a => a !== 'MARKT' && n.assets.includes(a)) || (n.assets.includes('MARKT') && m !== n && m.uitgever !== n.uitgever && m.assets.includes('MARKT') && m.belang >= SPOED.drempel));
+  const onbevestigd = kandidaten.filter(n => !bevestigd(n));
+  kandidaten = kandidaten.filter(bevestigd);
+  if (!kandidaten.length) { log(`nieuwscheck: groot nieuws maar nog maar 1 bron (${onbevestigd[0]?.uitgever}): wachten op bevestiging`); return { gestart: false, reden: 'wacht op tweede bron' }; }
+
+  const rondes = await db.laatsteRondes();
+  const minSinds = r => (nu - new Date(r.started_at)) / 60000;
+  if (rondes.some(r => r.status === 'bezig' && minSinds(r) < ZITTING.bezigMaxMin)) { log('nieuwscheck: er loopt al een zitting, het nieuws gaat mee in de volgende'); return { gestart: false, reden: 'zitting bezig' }; }
+  if (rondes[0] && minSinds(rondes[0]) < SPOED.rustNaRondeMin) { log('nieuwscheck: net een ronde gehad, het nieuws gaat mee in de volgende'); return { gestart: false, reden: 'net een ronde' }; }
+  const spoeden = rondes.filter(r => r.spoed);
+  if (spoeden[0] && minSinds(spoeden[0]) < SPOED.rustNaSpoedMin) { log('nieuwscheck: max 1 spoeddebat per uur'); return { gestart: false, reden: 'rustperiode' }; }
+  if (spoeden.filter(r => minSinds(r) < 24 * 60).length >= SPOED.maxPerDag) { log('nieuwscheck: dagmaximum bereikt'); return { gestart: false, reden: 'dagmaximum' }; }
+
+  const top = kandidaten[0];
+  log(`SPOED: "${top.titel}" (${top.uitgever}, belang ${top.belang}, ${top.assets.join('/')})`);
+  const uitslag = await start({ db, spoed: top, nu });
+  return { gestart: true, nieuws: top, uitslag };
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  nieuwscheck().catch(e => { console.error('Nieuwscheck mislukt:', e.message); process.exit(1); });
+}
