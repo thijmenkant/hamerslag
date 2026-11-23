@@ -600,7 +600,7 @@ const BRONNEN_LIJST = [
   { groep: 'Officieel en economie', id: 'cijfers', naam: 'Cijferkalender', wat: 'Wie de komende 7 dagen kwartaalcijfers brengt (Finnhub)', sleutel: true, elk: 'zitting', url: 'https://finnhub.io' },
   { groep: 'Officieel en economie', id: 'fred', naam: 'FRED', wat: 'Rente, inflatie, werkloosheid en de VIX', sleutel: true, elk: 'zitting', url: 'https://fred.stlouisfed.org' },
   { groep: 'Officieel en economie', id: 'feargreed', naam: 'Fear & Greed', wat: 'Stemming op de cryptomarkt', sleutel: false, elk: 'zitting', url: 'https://alternative.me/crypto/fear-and-greed-index/' },
-  { groep: 'AI', id: 'anthropic', naam: 'Claude (Anthropic)', wat: 'De hersenen van de traders en de voorzitter', sleutel: true, elk: 'zitting', url: 'https://console.anthropic.com' },
+  { groep: 'AI', id: 'anthropic', naam: 'Claude (Anthropic)', wat: 'De hersenen van de traders en de voorzitter', sleutel: true, betaald: true, elk: 'zitting', url: 'https://console.anthropic.com' },
 ];
 // Hoe oud mag het laatste goede contact zijn voor een groen lampje?
 const MAX_UUR = { '5min': 1, uur: 3, zitting: 26, dag: 50 };
@@ -632,7 +632,7 @@ function renderBronnen() {
   ${groepen.map(g => `<div class="card"><div class="card-h"><h2>${esc(g)}</h2></div>
     ${rijen.filter(r => r.b.groep === g).map(({ b, s, l }) => `<a class="bronrij" href="${esc(b.url)}" target="_blank" rel="noopener">
       <span class="lamp ${l.kleur}"></span>
-      <div class="br-m"><b>${esc(b.naam)}</b><span>${esc(b.wat)}</span><small>${ELK[b.elk]} · ${b.sleutel ? 'gratis sleutel' : 'geen sleutel'}</small></div>
+      <div class="br-m"><b>${esc(b.naam)}</b><span>${esc(b.wat)}</span><small>${ELK[b.elk]} · ${b.betaald ? 'betaald uit je tegoed' : b.sleutel ? 'gratis sleutel' : 'geen sleutel'}</small></div>
       <div class="br-s ${l.kleur}"><b>${esc(l.tekst)}</b>${s?.t && l.kleur !== 'grijs' ? `<span>${tijd(s.t)}${s.aantal != null ? ' · ' + s.aantal : ''}</span>` : ''}</div></a>`).join('')}
   </div>`).join('')}
   </div></div>
