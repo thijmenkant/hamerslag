@@ -24,7 +24,17 @@ function supabaseDb(base, key) {
   // Daarom groeperen we rijen met dezelfde velden en sturen we elke groep apart (volgorde blijft gelijk).
   const groepen = rows => { const g = []; for (const r of rows) { const k = Object.keys(r).sort().join(','); const laatste = g.at(-1); laatste && laatste.k === k ? laatste.rows.push(r) : g.push({ k, rows: [r] }); } return g; };
   const insert = async (tabel, rows) => { const uit = []; for (const g of groepen(rows)) uit.push(...(await req('POST', tabel, g.rows, 'return=representation'))); return uit; };
-  const upsert = async (tabel, rows, op) => { const uit = []; for (const g of groepen(rows)) uit.push(...(await req('POST', `${tabel}?on_conflict=${op}`, g.rows, 'resolution=merge-duplicates,return=representation'))); return uit; };
+  // Upsert: dezelfde sleutel twee keer in één batch weigert Postgres ("cannot affect row a second time").
+  // Daarom eerst ontdubbelen (de laatste wint); een lege sleutel wordt null (null botst nooit).
+  const ontdubbel = (rows, op) => {
+    const gezien = new Map(), zonder = [];
+    for (const r0 of rows) {
+      const r = r0[op] === '' ? { ...r0, [op]: null } : r0;
+      if (r[op] == null) zonder.push(r); else gezien.set(String(r[op]), r);
+    }
+    return [...gezien.values(), ...zonder];
+  };
+  const upsert = async (tabel, rows, op) => { const uit = []; for (const g of groepen(ontdubbel(rows, op))) uit.push(...(await req('POST', `${tabel}?on_conflict=${op}`, g.rows, 'resolution=merge-duplicates,return=representation'))); return uit; };
   return {
     soort: 'supabase',
     // De hele toestand staat in één jsonb-kolom 'data': zo past elk nieuw veld (kosten, pot, dividend, ...) er altijd in.
