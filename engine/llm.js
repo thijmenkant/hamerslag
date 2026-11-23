@@ -15,7 +15,7 @@ export async function vraagJson(prompt, { maxTokens = 2500, temperature = 0.8, v
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
         body: JSON.stringify({
-          model, max_tokens: maxTokens, temperature,
+          model, max_tokens: maxTokens,   // geen temperature: de 5.5-modellen weigeren die instelling
           system: 'Je bent de regie van een simulatie: 10 AI-traders debatteren over een papieren beleggingsportefeuille met nepgeld. Je antwoordt altijd met precies één geldig JSON-object en niets anders.',
           // vastDeel = het gedeelde begin (bronnenpakket + debat). Met prompt caching betaal je dat bij herhaling maar 10%.
           messages: [{ role: 'user', content: vastDeel ? [{ type: 'text', text: vastDeel, cache_control: { type: 'ephemeral' } }, { type: 'text', text: prompt }] : prompt }],
