@@ -54,21 +54,28 @@ export async function fetchStocks(usdEur, { pauze = 1150, symbolen = null } = {}
   if (!key) throw new Error('FINNHUB_KEY ontbreekt');
   const out = [];
   let mislukt = 0;
+  const haal = async a => {
+    const q = await getJson(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(a.fh)}&token=${key}`);
+    if (!(q.c > 0)) return false;
+    out.push({
+      sym: a.sym, naam: a.naam, soort: a.soort, rank: a.rank, prijs: q.c * usdEur, prijsUsd: q.c,
+      chg24h: num(q.dp) / 100, tijd: q.t ? new Date(q.t * 1000).toISOString() : new Date().toISOString(),
+      bron: 'Finnhub', url: `https://finnhub.io/quote/${a.fh}`,
+    });
+    return true;
+  };
+  const opnieuw = [];
   for (const a of [...AANDELEN, ...ETFS].filter(a => !symbolen || symbolen.includes(a.sym))) { // Finnhub gratis: max 60 per minuut, dus rustig aan
-    try {
-      const q = await getJson(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(a.fh)}&token=${key}`);
-      if (q.c > 0) out.push({
-        sym: a.sym, naam: a.naam, soort: a.soort, rank: a.rank, prijs: q.c * usdEur, prijsUsd: q.c,
-        chg24h: num(q.dp) / 100, tijd: q.t ? new Date(q.t * 1000).toISOString() : new Date().toISOString(),
-        bron: 'Finnhub', url: `https://finnhub.io/quote/${a.fh}`,
-      });
-      mislukt = 0;
-    } catch (e) {
+    try { await haal(a); mislukt = 0; }
+    catch (e) {
       // één aandeel mislukt: de rest gaat door. Maar 5 keer op rij mis en nog niets binnen = Finnhub ligt plat
       if (++mislukt >= 5 && !out.length) throw new Error(`Finnhub reageert niet (${e.message})`);
+      opnieuw.push(a);
     }
     await sleep(pauze);
   }
+  // Tweede kans voor wat mislukte (meestal even te veel aanvragen tegelijk): rustiger nog één keer proberen
+  for (const a of opnieuw.slice(0, 20)) { await sleep(pauze * 2); try { await haal(a); } catch {} }
   if (!out.length) throw new Error('geen enkele aandelenkoers');
   return out;
 }
@@ -226,7 +233,7 @@ export async function haalKoersen({ usdEur = 0.93, bezit = [], fouten = [], stoc
         const q = await veilig(`FMP reserve ${s}`, () => fetchFmpQuote(s, usdEur));
         if (q) { const a = vindAsset(s); stocksLijst.push({ sym: s, naam: a.naam, soort: a.soort, rank: a.rank, prijs: q.prijs, chg24h: q.chg24h, tijd: new Date().toISOString(), bron: 'Financial Modeling Prep', url: `https://financialmodelingprep.com/financial-summary/${s}` }); gevuld++; }
       }
-      meld('fmp', gevuld > 0, gevuld ? { aantal: `${gevuld} reservekoersen` } : { melding: 'reserve gaf geen koersen' });
+      meld('fmp', gevuld > 0, gevuld ? { aantal: `${gevuld} reservekoersen` } : { melding: `reserve gaf geen koers voor ${belangrijk.join(', ')}`.slice(0, 160) });
       if (gevuld) fouten.push(`Finnhub miste ${belangrijk.length} belangrijke koersen: ${gevuld} aangevuld via Financial Modeling Prep`);
     }
   }
