@@ -134,8 +134,9 @@ export async function ronde({ db = maakDb(), bronnen = verzamelBronnen, llm = ll
   const recent = (await db.recentRounds(4)).map(r => `ronde ${r.no}: ${r.proposal ? `${r.proposal.actie} €${r.proposal.bedrag} ${r.proposal.asset}` : 'geen voorstel'} → ${r.outcome}${r.votes_for != null ? ` (${r.votes_for} voor)` : ''}`);
   const spoedBron = spoed && pakket.find(b => b.url === spoed.url);
   const ctx = context({ traders: actief, pakket, staat, prijzen, recent }) + (spoedBron ? `\n\nSPOEDZITTING: deze ronde is extra ingelast vanwege net binnengekomen nieuws: [${spoedBron.id}] ${spoedBron.title} (${spoedBron.publisher}). Het raakt: ${spoed.assets.includes('MARKT') ? 'de hele markt' : spoed.assets.join(', ')}. Bespreek eerst wat dit nieuws betekent: is het goed of slecht nieuws, overdrijft de markt, zit het al in de koers? Kopen, verkopen of niks doen is allemaal mogelijk.` : '');
-  const ctxAanleiding = (aanleiding?.length ? `\n\nAANLEIDING VAN DEZE ZITTING: ${aanleiding.map(a => a.tekst).join('; ')}.` : '')
-    + (agenda?.length ? `\nAGENDA VAN DE VOORZITTING (kansen die de voorzitter en de agendacommissie zagen, nog géén besluit): ${agenda.map(k => `${k.asset} ${k.richting} (score ${k.score}/10): ${k.waarom}`).join('; ')}. Bespreek deze kansen eerst, maar beoordeel ze zelf kritisch.` : '');
+  const vraag = aanleiding?.find(a => a.soort === 'vraag');
+  const ctxAanleiding = (vraag ? `\n\nDEZE ZITTING IS AANGEVRAAGD DOOR DE EIGENAAR met de vraag: "${vraag.tekst.replace(/^vraag van de eigenaar: /, '')}". Beantwoord die vraag als parlement: doe een voorstel dat de vraag beantwoordt (kopen, verkopen of bewust niets doen). Zeg het eerlijk als de bronnen te weinig houvast geven.` : aanleiding?.length ? `\n\nAANLEIDING VAN DEZE ZITTING: ${aanleiding.map(a => a.tekst).join('; ')}.` : '')
+    + (agenda?.length && !vraag ? `\nAGENDA VAN DE VOORZITTING (kansen die de voorzitter en de agendacommissie zagen, nog géén besluit): ${agenda.map(k => `${k.asset} ${k.richting} (score ${k.score}/10): ${k.waarom}`).join('; ')}. Bespreek deze kansen eerst, maar beoordeel ze zelf kritisch.` : '');
   const bronTeller = {};
   const telBronnen = (id, lijst) => { bronTeller[id] = (bronTeller[id] || 0) + lijst.length; };
 

@@ -1,5 +1,5 @@
 import { avatarUrl } from './avatar.js';
-import { laad, abonneer, isLive, session, login, bronnenVoorRonde, laadRonde } from './data.js';
+import { laad, abonneer, isLive, session, login, bronnenVoorRonde, laadRonde, stelVraag, laadVragen } from './data.js';
 import { Speler } from './player.js';
 
 // ---------- helpers ----------
@@ -163,65 +163,121 @@ function besluitKaart() {
 const STEMMING = { 'Extreme Fear': 'heel angstig', Fear: 'angstig', Neutral: 'neutraal', Greed: 'hebberig', 'Extreme Greed': 'heel hebberig' };
 const stemmingTekst = t => String(t || '').replace(/^.*Fear & Greed( Index)?:?\s*/i, 'Stemming op de markt: ').replace(/\((Extreme Fear|Extreme Greed|Fear|Neutral|Greed)\)/, (_, w) => `(${STEMMING[w]})`);
 
-function renderHome() {
+// ---------- HOME: overzicht in vakken ----------
+const NODIG_STEMMEN = 6;
+function stemmenVan(msgs) { return (msgs || []).filter(m => m.phase === 'stem' && m.action?.stem).map(m => ({ id: m.trader_id, stem: m.action.stem, reden: m.text })); }
+let vraagBezig = false, logboekOpen = false;
+function vraagKaart() {
+  const open = (D.vragen || []).filter(v => v.status === 'wacht' || v.status === 'gestart');
+  const recent = (D.vragen || []).filter(v => Date.now() - new Date(v.t) < 24 * 3600e3 && ['gestart', 'klaar', 'fout'].includes(v.status)).length;
+  const over = Math.max(0, 5 - recent);
+  const STATUS = { wacht: 'start binnen 5 minuten', gestart: 'zitting is bezig' };
+  return `<div class="card vraag"><div class="card-b">
+    <form class="vr-in" id="vraagForm"><input id="vraagIn" maxlength="300" placeholder="Moeten we in goud investeren?" aria-label="Vraag aan de zaal" autocomplete="off"><button type="submit" ${vraagBezig ? 'disabled' : ''}>${vraagBezig ? 'Versturen…' : 'Start zitting'}</button></form>
+    <div class="vr-chips">${[['Goud', 'Moeten we in goud investeren?'], ['Bitcoin', 'Is dit een goed moment voor Bitcoin?'], ['Nvidia', 'Moeten we Nvidia kopen?'], ['Iets verkopen?', 'Moeten we iets verkopen?']].map(([l, q]) => `<button type="button" data-vraagvoorbeeld="${esc(q)}">${l}</button>`).join('')}</div>
+    ${open.map(v => `<div class="vr-open"><span class="dot ${v.status === 'gestart' ? 'red' : ''}"></span><b>${esc(v.vraag)}</b><span class="mut">${STATUS[v.status]}</span></div>`).join('')}
+    <div class="vr-voet mut" id="vraagMelding">${over ? `Nog ${over} eigen zitting${over === 1 ? '' : 'en'} vandaag` : 'Je eigen zittingen voor vandaag zijn op'}</div>
+  </div></div>`;
+}
+function pfKaart() {
   const v = waarde(), b = benchWaarde(), r = v / 1000 - 1, br = b / 1000 - 1;
   const [heel, cent] = nf(v).split(',');
-  const belegd = v - Number(D.state?.cash ?? v);
-  const bronnen = Object.values(D.sources || {}).sort((a, b) => Number(a.id.slice(1)) - Number(b.id.slice(1)));
-  const g = gezondheid(), k = D.state?.kosten;
-  const kostPct = k ? Math.min(1, k.eur / (k.budget || 50)) : 0;
-  $('#v-home').innerHTML = `
+  const cash = D.state?.cash ?? 0;
+  return `<div class="card pfk"><div class="card-b"><div style="display:flex;justify-content:space-between;align-items:center"><span class="eyebrow">Portefeuille · nepgeld</span><span class="chip ${r >= 0 ? 'up' : 'dn'}">${r >= 0 ? '▲' : '▼'} ${eur(v - 1000)} · ${pct(r)}</span></div>
+    <div class="money sm"><span class="cur">€</span><span class="big">${heel}</span><span class="cents">,${cent}</span></div>
+    <canvas id="heroChart" aria-label="Verloop van de portefeuille"></canvas>
+    <div class="pfk-st"><span><b>${eur(cash)}</b> vrij</span><span><b>${eur(v - cash)}</b> belegd</span><span title="Wat je had gehad als je niets had gedaan"><b class="${r - br >= 0 ? 'up' : 'dn'}">${(r - br >= 0 ? '+' : '') + pct(r - br).replace('+', '')}</b> t.o.v. laten liggen</span><a href="#portefeuille">Details →</a></div></div></div>`;
+}
+function tegelsKaart(r, vz) {
+  const bezig = isBezig(); if (bezig && D.round) r = D.round;
+  const k = (vz?.kansen || [])[0], n = actieveTraders().length || 10, voor = Number(r?.votes_for ?? 0), ok = r?.outcome === 'UITGEVOERD', p = r?.proposal;
+  const vandaag = d => d && new Date(d).toDateString() === new Date().toDateString();
+  const zitV = (D.rondes || []).filter(x => vandaag(x.started_at) && x.status !== 'fout').length, chkV = (D.voorzittingen || []).filter(x => vandaag(x.t)).length;
+  return `<div class="tegels">
+    <a class="tegel" href="#zaal"><span class="eyebrow">${bezig ? 'Nu in de zaal' : 'Laatste zitting'}</span><b>${p ? `${esc(p.asset)} ${p.actie === 'KOOP' ? 'kopen' : 'verkopen'}` : bezig ? 'Debat loopt' : 'Nog geen'}</b>${r && !bezig ? `<span class="tag ${ok ? 'VOOR' : 'AF'}">${ok ? 'JA' : 'NEE'} · ${voor}–${n - voor}</span>` : bezig ? '<span class="tag ZIT">LIVE</span>' : ''}</a>
+    <div class="tegel"><span class="eyebrow">Voorzitting ${vz ? tijd(vz.t) : ''}</span><b>${k ? `${esc(k.asset)} · kans ${k.score}/10` : vz ? 'Rustig uur' : 'Nog geen'}</b>${vz ? `<span class="tag ${vz.besluit === 'ZITTING' ? 'VOOR' : vz.besluit === 'RUSTIG' ? 'NIKS' : 'GEEL'}">${vz.besluit === 'ZITTING' ? 'ZITTING' : vz.besluit === 'RUSTIG' ? 'RUSTIG' : 'GEEN ZITTING'}</span>` : ''}</div>
+    <div class="tegel"><span class="eyebrow">Volgende check</span><b id="tegelCheck">${String(volgendeRonde().getHours()).padStart(2, '0')}:00</b><span class="mut" style="font-size:11.5px">elk heel uur</span></div>
+    <div class="tegel"><span class="eyebrow">Vandaag</span><b>${zitV} zitting${zitV === 1 ? '' : 'en'}</b><span class="mut" style="font-size:11.5px">${chkV} voorzitting${chkV === 1 ? '' : 'en'}</span></div>
+  </div>`;
+}
+function zittingKaart(r, msgs) {
+  if (!r) return '';
+  const p = r.proposal, ok = r.outcome === 'UITGEVOERD', n = actieveTraders().length || 10, voor = Number(r.votes_for ?? 0);
+  const st = stemmenVan(msgs), naam = id => traderMap[id]?.name || id;
+  const sv = st.find(x => x.stem === 'VOOR'), stg = st.find(x => x.stem === 'TEGEN');
+  const [bg, fg] = p ? kleurVan(p.asset) : ['#F1F3F8', '#5B6478'];
+  const vraag = (r.aanleiding || []).find(a => a.soort === 'vraag');
+  const waarom = vraag ? vraag.tekst.replace(/^vraag van de eigenaar: /, 'Jouw vraag: ') : r.spoed ? `Spoednieuws: ${r.spoed.titel}` : (r.aanleiding || []).filter(a => a.soort !== 'agenda').map(a => a.tekst).join(' · ');
+  return `<div class="card"><div class="card-h"><h2>Laatste zitting</h2><span class="mono mut" style="font-size:12px">${r.spoed ? 'spoed' : 'zitting ' + esc(r.no)} · ${wanneer(r.started_at)}</span></div>
+    <div class="card-b vakken" style="padding-top:6px">
+      ${waarom ? `<div class="vak vak-waarom"><span class="eyebrow">Waarom</span><p>${esc(waarom)}</p></div>` : ''}
+      <div class="vak vak-tafel">${p ? `<div class="ico" style="background:${bg};color:${fg}">${esc(p.asset)}</div>` : ''}<div style="flex:1;min-width:0"><span class="eyebrow">Op tafel</span><div class="zk-wat">${p ? `${p.actie === 'KOOP' ? 'Kopen' : 'Verkopen'} <b>${eur(r.trade?.bedrag ?? p.bedrag, 0)} ${esc(p.asset)}</b>` : 'Geen voorstel'}</div></div>${uitkomstTag(r)}</div>
+      ${r.votes_for != null ? `<div class="vak"><div class="zk-stand"><span class="up">${voor} voor</span><span class="mut">${NODIG_STEMMEN} nodig</span><span class="dn">${n - voor} tegen</span></div><div class="votebar dun"><i class="v" style="width:${voor / n * 100}%"></i><i class="t" style="width:${(n - voor) / n * 100}%"></i></div></div>` : ''}
+      ${sv ? `<div class="vak arg v"><span class="eyebrow">Sterkste voor</span><p><b>${esc(naam(sv.id))}</b> ${esc(sv.reden)}</p></div>` : ''}
+      ${stg ? `<div class="vak arg t"><span class="eyebrow">Sterkste tegen</span><p><b>${esc(naam(stg.id))}</b> ${esc(stg.reden)}</p></div>` : ''}
+      ${r.id && r.status !== 'fout' ? `<button type="button" class="btn licht" data-logdebat="${r.id}">Bekijk het hele debat →</button>` : ''}
+    </div></div>`;
+}
+function voorzittingenKaart() {
+  if (logboekOpen) return `${logboekKaart()}<button type="button" class="btn licht" data-logboek="dicht" style="margin-top:-4px">Logboek inklappen</button>`;
+  const lijst = (D.voorzittingen || []).slice(0, 4);
+  return `<div class="card"><div class="card-h"><h2>Voorzittingen</h2><span class="mut" style="font-size:12px">elk uur</span></div>
+    <div class="card-b vakken" style="padding-top:6px">${lijst.map(v => {
+      const kk = (v.kansen || [])[0], zit = v.besluit === 'ZITTING', rust = v.besluit === 'RUSTIG';
+      const ond = v.aanleiding?.[0]?.tekst?.replace(/^nieuws: /, '') || 'Niets bewogen, geen nieuw nieuws';
+      return `<div class="vak vz-vak"><div class="vz-boven"><span class="mono mut">${wanneer(v.t)}</span><span class="tag ${zit ? 'VOOR' : rust ? 'NIKS' : 'GEEL'}">${zit ? 'ZITTING' : rust ? 'RUSTIG' : 'GEEN ZITTING'}</span>${kk ? `<span class="score-mini ${kk.score >= 6 ? 'hoog' : ''}">${esc(kk.asset)} ${kk.score}/10</span>` : ''}</div><div class="vz-ond">${esc(ond)}</div>${v.reden && !rust ? `<div class="vz-reden">${esc(v.reden)}</div>` : ''}</div>`;
+    }).join('') || '<p class="mut" style="font-size:13px">Na de eerste uurcheck zie je hier wat de voorzitter elk uur besloot.</p>'}
+    <button type="button" class="btn licht" data-logboek="open">Hele logboek: alle zittingen en checks →</button></div></div>`;
+}
+function renderHome() {
+  const g = gezondheid();
+  const r = D.besluit || (D.round?.status === 'klaar' ? D.round : null) || D.round;
+  const msgs = r && (r === D.round || (r.id && r.id === D.round?.id)) ? D.messages : [];
+  const vz = (D.voorzittingen || [])[0];
+  $('#v-home').innerHTML = `<div class="home">
   ${g ? `<div class="alarm ${g.niveau}"><b>${esc(g.titel)}</b><span>${esc(g.tekst)}</span></div>` : ''}
   ${welkomKaart()}
+  ${pfKaart()}
+  ${tegelsKaart(r, vz)}
   <div id="liveKaart"></div>
-  ${besluitKaart()}
-  <div class="grid">
-    <div class="col">
-      <div class="card hero">
-        <div style="display:flex;justify-content:space-between;align-items:center"><span class="eyebrow">Portefeuille · nepgeld</span><span class="chip">start €1.000</span></div>
-        <div class="money"><span class="cur">€</span><span class="big">${heel}</span><span class="cents">,${cent}</span></div>
-        <div class="chips"><span class="chip ${r >= 0 ? 'up' : 'dn'}">${r >= 0 ? '▲' : '▼'} ${eur(v - 1000)} · ${pct(r)}</span><span class="mut" style="font-size:12.5px" title="Wat je had gehad als je bij de start van alles een beetje had gekocht en niets meer had gedaan">gewoon laten liggen: ${pct(br)}</span></div>
-        <canvas id="heroChart" aria-label="Verloop van de portefeuille"></canvas>
-        <div class="stats"><div><b>${eur(D.state?.cash ?? 0)}</b><span>Vrij geld</span></div><div><b>${eur(belegd)}</b><span>Belegd</span></div><div><b class="${r - br >= 0 ? 'up' : 'dn'}">${(r - br >= 0 ? '+' : '−') + nf(Math.abs((r - br) * 100), 2)}%</b><span>${r - br >= 0 ? 'beter' : 'slechter'} dan laten liggen</span></div></div>
-      </div>
-
-      <div class="card">
-        <div class="card-h"><h2>De zaal <span class="pill" id="livePill" style="padding:3px 8px;font-size:10px"><span class="dot red"></span>LIVE</span></h2><span class="mut" id="miniFase" style="font-size:12px"></span></div>
-        <div id="spoedBalk"></div>
-        <div id="aanleidingBalk"></div>
-        <div class="zaal-mini" id="zaalMini"></div>
-        <div style="padding:0 16px 16px"><a class="btn" href="#zaal">Stap de 3D-zaal in <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></a></div>
-      </div>
-
-      <div class="card" id="voorstelCard"></div>
-      <div class="card" id="argumentenCard" hidden></div>
-      <div id="logboek">${logboekKaart()}</div>
-    </div>
-    <div class="col">
-      ${k ? `<div class="card"><div class="card-h"><h2>AI-kosten deze maand</h2><span class="chip ${kostPct >= 0.7 ? 'dn' : ''}">${kostPct >= 0.7 ? 'spaarstand' : 'normaal'}</span></div>
-        <div class="card-b"><div class="kosten"><b>€${nf(k.eur)}</b><span class="mut">van €${k.budget || 50}</span></div>
-        <div class="kbar"><i style="width:${kostPct * 100}%;background:${kostPct >= 0.9 ? 'var(--red)' : kostPct >= 0.7 ? 'var(--gold)' : 'var(--iris)'}"></i><s style="left:70%"></s></div>
-        <p class="mut" style="font-size:12px;margin-top:8px">Vanaf €${Math.round((k.budget || 50) * 0.7)} gebruiken de duurste traders een goedkoper AI-model. Bij €${k.budget || 50} pauzeert het parlement tot volgende maand.</p></div></div>` : ''}
-      <div class="card">
-        <div class="card-h"><h2>Grootste bewegers</h2><a href="#markt" style="font-size:12.5px;font-weight:700">Hele markt →</a></div>
-        <div id="marktLijst" style="margin-top:6px"></div>
-      </div>
-      <div class="card">
-        <div class="card-h"><h2>Bronnen van deze zitting</h2><span class="mut" style="font-size:12px">${bronnen.length} stuks</span></div>
-        <div style="margin-top:6px">${bronnen.map(s => `<div class="bron"><span class="id">${esc(s.id)}</span><div style="flex:1;min-width:0"><a href="${esc(veiligeUrl(s.url))}" target="_blank" rel="noopener" style="color:var(--tx)">${esc(s.title)}</a><small>${esc(s.publisher)} · ${geleden(s.published_at)}</small></div></div>`).join('') || '<div class="card-b mut">Nog geen bronnen.</div>'}</div>
-      </div>
-    </div>
+  <div id="vraagVak">${vraagKaart()}</div>
+  ${zittingKaart(r, msgs)}
+  <div id="logboek">${voorzittingenKaart()}</div>
+  <div class="card"><div class="card-h"><h2>De zaal <span class="pill" id="livePill" style="padding:3px 8px;font-size:10px"><span class="dot red"></span>LIVE</span></h2><span class="mut" id="miniFase" style="font-size:12px"></span></div>
+    <div id="aanleidingBalk"></div>
+    <div class="zaal-mini" id="zaalMini"></div>
+    <div style="padding:0 16px 16px"><a class="btn" href="#zaal">Stap de 3D-zaal in <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></a></div>
+  </div>
   </div>`;
   $('#welkomWeg')?.addEventListener('click', () => { zetOnthoud('hs-welkom-weg', '1'); $('#welkom')?.remove(); });
-  renderMarkt();
+  koppelVraag();
   requestAnimationFrame(() => {
-    const snaps = D.snapshots || [];
+    const snaps = D.snapshots || [], v = waarde();
     lijn($('#heroChart'), [
       { data: snaps.map(s => Number(s.bench)), color: '#A3AAC2', dash: true, w: 1.5 },
       { data: snaps.map(s => Number(s.value)).concat(v), color: '#F25600', w: 2.4, fill: 'rgba(242,86,0,.12)' },
     ]);
     updateMini(speler.s);
   });
+}
+function koppelVraag() {
+  const f = $('#vraagForm'); if (!f) return;
+  f.onsubmit = async e => {
+    e.preventDefault();
+    const tekst = $('#vraagIn').value.trim(), meld = $('#vraagMelding');
+    if (tekst.length < 3) { meld.textContent = 'Typ eerst een vraag, bijvoorbeeld: moeten we in goud investeren?'; meld.style.color = 'var(--red)'; return; }
+    vraagBezig = true; f.querySelector('button').disabled = true; f.querySelector('button').textContent = 'Versturen…';
+    try {
+      await stelVraag(tekst);
+      D.vragen = await laadVragen();
+      vraagBezig = false; $('#vraagVak').innerHTML = vraagKaart(); koppelVraag();
+      $('#vraagMelding').textContent = 'Verstuurd. De zitting start binnen 5 minuten; je ziet hem hier en in de zaal.';
+      $('#vraagMelding').style.color = 'var(--up)';
+    } catch (err) {
+      vraagBezig = false; f.querySelector('button').disabled = false; f.querySelector('button').textContent = 'Start zitting';
+      meld.textContent = 'Versturen lukte niet. Probeer het opnieuw.'; meld.style.color = 'var(--red)'; console.error(err);
+    }
+  };
 }
 
 function renderMarkt() {
@@ -347,7 +403,7 @@ function logboekKaart() {
     ${logFilter === 'alles' ? '<p class="mut lg-voet">Elk uur kijkt de app of er iets gebeurt. Zo ja, dan bekijken Voorzitter Eva, Daan en Noor de kansen. Alleen bij een kans van 6 of hoger komt er een zitting.</p>' : ''}
   </div>`;
 }
-const tekenLogboek = () => { const el = $('#logboek'); if (el) el.innerHTML = logboekKaart(); };
+const tekenLogboek = () => { const el = $('#logboek'); if (el) el.innerHTML = voorzittingenKaart(); };
 async function bekijkDebat(id) {
   const r = (D.rondes || []).find(x => x.id === id); if (!r) return;
   const { messages, sources } = await laadRonde(id);
@@ -612,6 +668,10 @@ document.addEventListener('click', e => {
   if (ms) { marktSort = ms.dataset.msort; tekenMarktLijst(); return; }
   const mo = e.target.closest('[data-mopen]');
   if (mo) { marktOpen = marktOpen === mo.dataset.mopen ? null : mo.dataset.mopen; tekenMarktLijst(); return; }
+  const vv = e.target.closest('[data-vraagvoorbeeld]');
+  if (vv) { const i = $('#vraagIn'); if (i) { i.value = vv.dataset.vraagvoorbeeld; i.focus(); } return; }
+  const lb = e.target.closest('[data-logboek]');
+  if (lb) { logboekOpen = lb.dataset.logboek === 'open'; const el = $('#logboek'); if (el) el.innerHTML = voorzittingenKaart(); if (logboekOpen) el?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
   const lf = e.target.closest('[data-logf]');
   if (lf) { logFilter = lf.dataset.logf; tekenLogboek(); return; }
   const lo = e.target.closest('[data-logopen]');
@@ -678,8 +738,13 @@ function renderBronnen() {
   const groepen = [...new Set(BRONNEN_LIJST.map(b => b.groep))];
   const laatst = Object.values(st).map(s => s?.t).filter(Boolean).sort().at(-1);
   const ELK = { '5min': 'elke 5 min', uur: 'elk uur', zitting: 'bij elke zitting', dag: 'dagelijks' };
+  const k = D.state?.kosten, kostPct = k ? Math.min(1, k.eur / (k.budget || 50)) : 0;
   $('#v-bronnen').innerHTML = `
   <h2 class="pagetitle">Bronnen</h2>
+  ${k ? `<div class="card"><div class="card-h"><h2>AI-kosten deze maand</h2><span class="chip ${kostPct >= 0.7 ? 'dn' : ''}">${kostPct >= 0.7 ? 'spaarstand' : 'normaal'}</span></div>
+        <div class="card-b"><div class="kosten"><b>€${nf(k.eur)}</b><span class="mut">van €${k.budget || 50}</span></div>
+        <div class="kbar"><i style="width:${kostPct * 100}%;background:${kostPct >= 0.9 ? 'var(--red)' : kostPct >= 0.7 ? 'var(--gold)' : 'var(--iris)'}"></i><s style="left:70%"></s></div>
+        <p class="mut" style="font-size:12px;margin-top:8px">Vanaf €${Math.round((k.budget || 50) * 0.7)} gebruiken de duurste traders een goedkoper AI-model. Bij €${k.budget || 50} pauzeert het parlement tot volgende maand.</p></div></div>` : ''}
   <div class="card bronsamen"><div class="card-b">
     <div class="bs-top"><div class="bs-groot"><b style="${tel('groen') ? '' : 'color:var(--mut)'}">${tel('groen')}</b><span>van de ${rijen.length} actief</span></div>
     <div class="bs-chips">${tel('rood') ? `<span class="chip dn">${tel('rood')} werkt niet</span>` : ''}${tel('oranje') ? `<span class="chip" style="color:#B45309">${tel('oranje')} lang stil</span>` : ''}${uit ? `<span class="chip">${uit} niet ingesteld</span>` : ''}${leeg ? `<span class="chip">${leeg} nog niet gebruikt</span>` : ''}</div></div>

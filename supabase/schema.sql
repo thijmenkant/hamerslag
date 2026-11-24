@@ -145,3 +145,24 @@ begin
   begin alter publication supabase_realtime add table rounds; exception when duplicate_object then null; end;
   begin alter publication supabase_realtime add table market; exception when duplicate_object then null; end;
 end $$;
+
+-- Vragen van de eigenaar aan de zaal ("moeten we in goud investeren?").
+-- De app (ingelogd) mag een vraag toevoegen en lezen; de motor (service_role) pakt hem op.
+create table if not exists verzoeken (
+  id bigint generated always as identity primary key,
+  t timestamptz not null default now(),
+  vraag text not null check (char_length(vraag) between 3 and 300),
+  status text not null default 'wacht' check (status in ('wacht','gestart','klaar','fout','geweigerd')),
+  assets text[],
+  reden text,
+  round_no int,
+  uitkomst text,
+  behandeld_at timestamptz
+);
+alter table verzoeken enable row level security;
+drop policy if exists "verzoeken lezen" on verzoeken;
+create policy "verzoeken lezen" on verzoeken for select to authenticated using (true);
+drop policy if exists "verzoeken toevoegen" on verzoeken;
+create policy "verzoeken toevoegen" on verzoeken for insert to authenticated with check (status = 'wacht' and round_no is null and behandeld_at is null);
+grant select, insert on verzoeken to authenticated;
+grant all on verzoeken to service_role;

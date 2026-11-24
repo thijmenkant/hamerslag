@@ -5,10 +5,14 @@ import { SPOED, ZITTING } from './config.js';
 import { fetchNews } from './sources.js';
 import { maakDb } from './db.js';
 import { ronde } from './run.js';
+import { verwerkVraag } from './vraag.js';
 
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 
 export async function nieuwscheck({ db = maakDb(), nieuws = () => fetchNews({ maxUren: 3, max: 60 }), start = ronde, nu = new Date() } = {}) {
+  // Eerst: heeft de eigenaar een vraag aan de zaal gesteld? Die gaat voor.
+  try { const v = await verwerkVraag({ db, start, nu }); if (v.gestart) return v; }
+  catch (e) { log('⚠ vraag mislukt:', e.message); }
   const lijst = await nieuws();
   const grens = nu.getTime() - SPOED.maxLeeftijdMin * 60000;
   let kandidaten = lijst.filter(n => n.belang >= SPOED.drempel && n.assets.length && new Date(n.tijd).getTime() >= grens);

@@ -349,3 +349,35 @@ body.inzaal .screenstat{bottom:calc(32vh + 96px)}
 .lg-meter{flex:1 1 60px;height:5px;border-radius:3px;background:#EEF1F6;overflow:hidden;min-width:60px}.lg-meter i{display:block;height:100%;background:#F59E0B;border-radius:3px}.lg-meter i.hoog{background:#10B981}
 .lg-item .btn{margin-top:6px;border:0;width:100%;cursor:pointer;font-family:inherit}
 .lg-voet{font-size:12px;padding:0 16px 14px}
+
+/* Home: overzicht in vakken */
+.home{display:flex;flex-direction:column;gap:14px;max-width:620px;margin:0 auto}
+.home .card-b{padding:12px 16px 16px}
+.pfk .money.sm .big{font-size:42px}.pfk canvas{width:100%;height:92px;display:block;margin:6px 0 8px}
+.pfk-st{display:flex;gap:6px 14px;font-size:12.5px;color:var(--mut);align-items:center;flex-wrap:wrap}.pfk-st b{color:var(--tx)}.pfk-st a{margin-left:auto;font-weight:700}
+.tegels{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tegel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 13px;display:flex;flex-direction:column;gap:5px;box-shadow:var(--shadow);color:var(--tx);align-items:flex-start;min-width:0}
+.tegel .eyebrow{font-size:9.5px;letter-spacing:.08em}.tegel b{font-family:var(--head);font-size:16px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vraag{border:2px solid var(--iris)}
+.vr-in{display:flex;gap:6px;background:var(--soft);border:1px solid var(--line2);border-radius:12px;padding:5px 5px 5px 12px}
+.vr-in input{flex:1;min-width:0;border:0;background:none;font:500 15px Inter,system-ui,sans-serif;outline:none;color:var(--tx);text-overflow:ellipsis}
+.vr-in button{border:0;background:var(--iris);color:#fff;font:700 13px Inter,system-ui,sans-serif;border-radius:9px;padding:9px 12px;white-space:nowrap;cursor:pointer}.vr-in button:disabled{opacity:.6}
+.vr-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}.vr-chips button{font:600 12px Inter,system-ui,sans-serif;padding:5px 11px;border-radius:999px;background:var(--card);border:1px solid var(--line2);color:var(--mut);cursor:pointer}
+.vr-open{display:flex;align-items:center;gap:8px;font-size:12.5px;margin-top:9px;padding:8px 10px;border-radius:10px;background:#FFF8F3;border:1px solid #FDC9A6;flex-wrap:wrap}.vr-open .dot{background:#F59E0B}.vr-open .dot.red{background:var(--red)}
+.vr-voet{font-size:11.5px;margin-top:8px}
+.vakken{display:flex;flex-direction:column;gap:8px}
+.vak{background:var(--soft);border:1px solid var(--line);border-radius:14px;padding:10px 12px;display:block}
+.vak-waarom p{font-size:13px;color:var(--mut);margin-top:3px;line-height:1.45}
+.vak-tafel{display:flex;align-items:center;gap:12px}.vak-tafel .ico{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;font-weight:800;font-size:11.5px;flex:none}
+.zk-wat{font-family:var(--head);font-size:17px;font-weight:600;margin-top:2px}.zk-wat b{font-weight:700}
+.votebar.dun{height:6px}
+.zk-stand{display:flex;justify-content:space-between;font-size:12px;font-weight:700;margin-bottom:6px}
+.vak.arg .eyebrow{display:block}
+.vak.arg p{font-size:12.5px;line-height:1.4;color:var(--mut);margin-top:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.vak.arg p b{color:var(--tx)}
+.vak.arg.v{background:#F0FBF6;border-color:#C9EEDD}.vak.arg.v .eyebrow{color:#047857}
+.vak.arg.t{background:#FFF4F6;border-color:#FBD3DB}.vak.arg.t .eyebrow{color:#BE123C}
+.vz-vak{padding:9px 12px}.vz-boven{display:flex;align-items:center;gap:8px;font-size:12px}.vz-boven .score-mini{margin-left:auto}
+.vz-ond{font-size:13px;font-weight:600;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vz-reden{font-size:12px;color:var(--mut);margin-top:2px;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.score-mini{font:700 11px var(--mono);padding:2px 6px;border-radius:6px;background:#EEF1F6;color:var(--mut);white-space:nowrap}.score-mini.hoog{background:#ECFDF5;color:#047857}
+.btn.licht{background:var(--soft);color:var(--tx);border:1px solid var(--line2);min-height:42px;font-size:13.5px;width:100%;cursor:pointer;font-family:inherit}

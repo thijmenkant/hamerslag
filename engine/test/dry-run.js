@@ -273,3 +273,11 @@ console.log('✅ Vangnetten en kosten werken. Stemmen blind en apart:', llm.verb
   assert.ok(d.messages.some(m => m.action?.aanleiding), 'aanleiding als bericht in de zaal');
   console.log('✅ Zitting met agenda van de voorzitting werkt:', r.uitkomst);
 }
+{
+  // Vraag van de eigenaar uit de app: "moeten we in goud?"
+  let prompt = '';
+  const kijk = { ...llm, vraagJson: async (p, o) => { prompt += p + (o?.vastDeel || ''); return llm.vraagJson(p, o); } };
+  const r = await ronde({ db, bronnen, llm: kijk, beurtPauze: 0, nu: new Date(Date.parse(d.rounds.at(-1).started_at) + 2 * 3600000), aanleiding: [{ soort: 'vraag', tekst: 'vraag van de eigenaar: Moeten we investeren in goud?' }], agenda: [{ asset: 'GLD', richting: 'KOOP', score: 0, waarom: 'genoemd in de vraag' }] });
+  assert.ok(prompt.includes('AANGEVRAAGD DOOR DE EIGENAAR') && prompt.includes('investeren in goud'), 'de vraag staat in de opdracht aan de traders');
+  console.log('✅ Zitting op vraag van de eigenaar werkt:', r.uitkomst);
+}

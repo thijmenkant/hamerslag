@@ -63,11 +63,14 @@ function supabaseDb(base, key) {
     bekendeUrls: async urls => { if (!urls.length) return new Set(); const lijst = urls.map(u => `"${u.replace(/"/g, '')}"`).join(','); return new Set((await req('GET', `headlines?select=url&url=in.(${encodeURIComponent(lijst)})`)).map(r => r.url)); },
     laatsteRondes: () => req('GET', 'rounds?select=id,started_at,spoed,status&order=id.desc&limit=30'),
     insertVoorzitting: row => insert('voorzittingen', [row]),
+    wachtendeVragen: () => req('GET', 'verzoeken?select=*&status=eq.wacht&order=id.asc&limit=5'),
+    vragenGestartSinds: async t => (await req('GET', `verzoeken?select=id&status=in.(gestart,klaar,fout)&behandeld_at=gte.${encodeURIComponent(t)}`)).length,
+    updateVraag: (id, patch) => req('PATCH', `verzoeken?id=eq.${id}`, patch, 'return=minimal'),
   };
 }
 
 export function geheugenDb() {
-  const d = { state: null, traders: [], market: [], rounds: [], sources: [], messages: [], trades: [], snapshots: [], headlines: [], voorzittingen: [] };
+  const d = { state: null, traders: [], market: [], rounds: [], sources: [], messages: [], trades: [], snapshots: [], headlines: [], voorzittingen: [], verzoeken: [] };
   let rid = 0;
   return {
     soort: 'geheugen', data: d,
@@ -89,5 +92,8 @@ export function geheugenDb() {
     bekendeUrls: async urls => new Set(d.headlines.map(h => h.url).filter(u => urls.includes(u))),
     laatsteRondes: async () => d.rounds.slice(-30).reverse(),
     insertVoorzitting: async row => { d.voorzittingen.push(row); },
+    wachtendeVragen: async () => d.verzoeken.filter(v => v.status === 'wacht').sort((a, b) => a.id - b.id),
+    vragenGestartSinds: async t => d.verzoeken.filter(v => ['gestart', 'klaar', 'fout'].includes(v.status) && v.behandeld_at >= t).length,
+    updateVraag: async (id, patch) => { Object.assign(d.verzoeken.find(v => v.id === id), patch); },
   };
 }
