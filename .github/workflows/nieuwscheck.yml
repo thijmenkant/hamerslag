@@ -43,4 +43,5 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           APP_URL: ${{ vars.APP_URL }}
-        run: node meld.js "Hamerslag: workflow mislukt" "De GitHub-workflow '${{ github.workflow }}' is mislukt. Kijk bij Actions in je repository." || true
+        run: |
+          node meld.js "Hamerslag: workflow mislukt" "De GitHub-workflow '${{ github.workflow }}' is mislukt. Kijk bij Actions in je repository." || true
