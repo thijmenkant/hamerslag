@@ -486,3 +486,17 @@ button.tl-it{cursor:pointer}button.tl-it:hover{border-color:var(--line2)}
 .tl-it .score-mini,.tl-it .score-mini.hoog{background:rgba(255,255,255,.75);color:var(--mut);border:1px solid var(--line)}
 .tl-zit.open .vak.arg.v,.tl-zit.open .vak.arg.t{background:var(--soft);border-color:var(--line)}
 .tl-zit.open .vak.arg.v .eyebrow{color:#047857}.tl-zit.open .vak.arg.t .eyebrow{color:#BE123C}
+
+/* Uur voor uur: strak uitgelijnd */
+.tl-rij{flex-wrap:nowrap;gap:8px}
+.tl-rij .tl-t{flex:none}
+.tl-naam{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tl-uit{margin-left:auto;flex:none;white-space:nowrap}
+.tl-pijl{flex:none;margin-left:2px;width:12px;text-align:center}
+.tl-uit+.tl-pijl{margin-left:2px}
+.tl-zit .tl-kop{display:flex;align-items:center;width:100%}
+.tl-onder{display:flex;align-items:flex-start;gap:8px;margin-top:4px}
+.tl-onder .tl-ond{margin-top:0;flex:1;min-width:0}
+.tl-onder .score-mini{flex:none;margin-top:1px}
+.tl-vraag{font-size:12px;color:var(--mut);font-style:italic;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tl-naam{flex:none}
