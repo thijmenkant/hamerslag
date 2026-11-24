@@ -2,9 +2,13 @@ name: Hamerslag uurcheck
 
 on:
   schedule:
-    - cron: '0 * * * *'      # elk heel uur: gebeurt er iets? Zo ja: voorzitting. Alleen bij een echte kans: zitting.
-                               # (GitHub start op het hele uur soms een paar minuten later: dan is het druk)
-  workflow_dispatch:          # knop "Run workflow": start altijd direct een zitting
+    - cron: '7 * * * *'      # reserve, 7 over het uur: precies op het hele uur slaat GitHub geplande taken vaak over
+  workflow_dispatch:          # knop "Run workflow" (start direct een zitting) en de externe wekker (alleen de uurcheck)
+    inputs:
+      zitting:
+        description: 'Direct een zitting starten (uit = alleen de gewone uurcheck)'
+        type: boolean
+        default: true
 
 concurrency:
   group: parlement-uurcheck   # eigen groep: anders annuleert de ene workflow de wachtende van de andere
@@ -38,7 +42,7 @@ jobs:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           APP_URL: ${{ vars.APP_URL }}
           SEC_CONTACT: ${{ vars.SEC_CONTACT }}
-          FORCEER: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
+          FORCEER: ${{ github.event_name == 'workflow_dispatch' && inputs.zitting && '1' || '' }}
       - name: Melding als het misgaat
         if: failure()
         env:

@@ -147,6 +147,9 @@ export async function zittingscheck({ db = maakDb(), koersen = alleKoersen, nieu
     log('uurcheck: handmatig gestart, direct een zitting');
     return { gestart: true, aanleiding: a, uitslag: await start({ db, nu, aanleiding: a }) };
   }
+  // De externe wekker (hele uur) en GitHub zelf (7 over) starten allebei een check: de tweede slaat over.
+  const minCheck = staat.laatsteCheck?.t ? (nu - new Date(staat.laatsteCheck.t)) / 60000 : Infinity;
+  if (minCheck >= 0 && minCheck < 20) { log(`uurcheck: ${Math.round(minCheck)} min geleden al gedaan, overgeslagen`); return { gestart: false, reden: 'net gecheckt' }; }
   if (staat.kosten?.gestopt) { log('uurcheck: budget op, geen zitting'); return { gestart: false, reden: 'budget' }; }
   if (rondes.some(r => r.status === 'bezig' && (nu - new Date(r.started_at)) / 60000 < ZITTING.bezigMaxMin)) { log('uurcheck: er loopt al een zitting'); return { gestart: false, reden: 'zitting bezig' }; }
   const minSinds = laatste ? (nu - new Date(laatste.started_at)) / 60000 : Infinity;
