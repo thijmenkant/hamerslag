@@ -5,7 +5,7 @@ import { geheugenDb } from '../db.js';
 import { verwerkVraag, MAX_VRAGEN_PER_DAG } from '../vraag.js';
 import { nieuwscheck } from '../nieuwscheck.js';
 
-const db = geheugenDb(), nu = new Date('2026-11-24T09:00:00Z');
+const db = geheugenDb(), nu = new Date('2026-11-24T15:00:00Z');   // dinsdag 16:00 NL: beurs open
 let gestart = [];
 const start = async a => { gestart.push(a); return { no: 7, uitkomst: 'AFGEWEZEN' }; };
 db.data.verzoeken.push({ id: 1, t: nu.toISOString(), vraag: 'Moeten we investeren in goud?', status: 'wacht' });
@@ -28,4 +28,11 @@ db.data.rounds.pop();
 for (let i = 0; i < MAX_VRAGEN_PER_DAG; i++) db.data.verzoeken.push({ id: 10 + i, vraag: 'x', status: 'klaar', behandeld_at: nu.toISOString() });
 assert.equal((await verwerkVraag({ db, start, nu })).reden, 'dagmaximum');
 assert.equal(db.data.verzoeken.find(v => v.id === 2).status, 'geweigerd');
+// beurs dicht (dinsdag 10:00 NL) en de vraag gaat over goud: wachten tot de opening
+const db2 = geheugenDb(); db2.data.verzoeken.push({ id: 1, vraag: 'Moeten we in goud investeren?', status: 'wacht' });
+const w = await verwerkVraag({ db: db2, start, nu: new Date('2026-11-24T09:00:00Z') });
+assert.equal(w.reden, 'beurs dicht'); assert.equal(db2.data.verzoeken[0].status, 'wacht');
+// crypto kan altijd
+db2.data.verzoeken[0].vraag = 'Is dit een goed moment voor Bitcoin?';
+assert.equal((await verwerkVraag({ db: db2, start, nu: new Date('2026-11-24T09:00:00Z') })).gestart, true);
 console.log('✅ Vragen aan de zaal werken: opgepakt binnen de nieuwsreflex, juiste focus (goud = GLD), wacht bij een lopende zitting, max', MAX_VRAGEN_PER_DAG, 'per dag.');

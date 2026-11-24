@@ -1,7 +1,7 @@
 // Vragen van de eigenaar: "moeten we in goud investeren?" vanuit de app.
 // De app zet de vraag in de tabel 'verzoeken'; de nieuwsreflex (elke 5 minuten) pakt hem op en start een zitting.
 
-import { ASSETS, KOPPELING, ZITTING } from './config.js';
+import { ASSETS, KOPPELING, ZITTING, beursOpen, vindAsset } from './config.js';
 import { ronde } from './run.js';
 
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
@@ -38,6 +38,13 @@ export async function verwerkVraag({ db, start = ronde, nu = new Date() } = {}) 
     log('vraag: dagmaximum bereikt, geweigerd'); return { gestart: false, reden: 'dagmaximum' };
   }
   const assets = assetsUitVraag(v.vraag);
+  // Gaat de vraag alleen over aandelen/ETF's (bijv. goud = GLD) en is de Amerikaanse beurs dicht?
+  // Dan kan er niets gekocht of verkocht worden: de vraag wacht tot de beurs opent (15:30 Nederlandse tijd).
+  if (assets.length && assets.every(a => vindAsset(a)?.soort !== 'crypto') && !beursOpen(nu)) {
+    if (!v.reden) await db.updateVraag(v.id, { reden: 'wacht tot de Amerikaanse beurs opent (15:30)', assets });
+    log(`vraag: "${v.vraag}" gaat over ${assets.join(', ')}, beurs dicht: wacht tot de opening`);
+    return { gestart: false, reden: 'beurs dicht' };
+  }
   await db.updateVraag(v.id, { status: 'gestart', behandeld_at: nu.toISOString(), assets });
   log(`VRAAG: "${v.vraag}"${assets.length ? ` (gaat over ${assets.join(', ')})` : ''}`);
   const aanleiding = [{ soort: 'vraag', tekst: `vraag van de eigenaar: ${v.vraag}` }];

@@ -381,3 +381,10 @@ body.inzaal .screenstat{bottom:calc(32vh + 96px)}
 .vz-reden{font-size:12px;color:var(--mut);margin-top:2px;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
 .score-mini{font:700 11px var(--mono);padding:2px 6px;border-radius:6px;background:#EEF1F6;color:var(--mut);white-space:nowrap}.score-mini.hoog{background:#ECFDF5;color:#047857}
 .btn.licht{background:var(--soft);color:var(--tx);border:1px solid var(--line2);min-height:42px;font-size:13.5px;width:100%;cursor:pointer;font-family:inherit}
+
+.home-grid{display:flex;flex-direction:column;gap:14px}.home-kol{display:flex;flex-direction:column;gap:14px;min-width:0}
+@media (min-width:980px){
+  .home{max-width:1180px}
+  .home-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:start}
+  .home .zaal-mini{max-width:760px;margin:0 auto}
+}

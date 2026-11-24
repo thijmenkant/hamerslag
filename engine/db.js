@@ -64,7 +64,7 @@ function supabaseDb(base, key) {
     laatsteRondes: () => req('GET', 'rounds?select=id,started_at,spoed,status&order=id.desc&limit=30'),
     insertVoorzitting: row => insert('voorzittingen', [row]),
     wachtendeVragen: () => req('GET', 'verzoeken?select=*&status=eq.wacht&order=id.asc&limit=5'),
-    vragenGestartSinds: async t => (await req('GET', `verzoeken?select=id&status=in.(gestart,klaar,fout)&behandeld_at=gte.${encodeURIComponent(t)}`)).length,
+    vragenGestartSinds: async t => (await req('GET', `verzoeken?select=id,uitkomst&status=in.(gestart,klaar)&behandeld_at=gte.${encodeURIComponent(t)}`)).filter(v => v.uitkomst !== 'GEEN VOORSTEL').length,   // mislukte of lege zittingen tellen niet mee
     updateVraag: (id, patch) => req('PATCH', `verzoeken?id=eq.${id}`, patch, 'return=minimal'),
   };
 }
@@ -93,7 +93,7 @@ export function geheugenDb() {
     laatsteRondes: async () => d.rounds.slice(-30).reverse(),
     insertVoorzitting: async row => { d.voorzittingen.push(row); },
     wachtendeVragen: async () => d.verzoeken.filter(v => v.status === 'wacht').sort((a, b) => a.id - b.id),
-    vragenGestartSinds: async t => d.verzoeken.filter(v => ['gestart', 'klaar', 'fout'].includes(v.status) && v.behandeld_at >= t).length,
+    vragenGestartSinds: async t => d.verzoeken.filter(v => ['gestart', 'klaar'].includes(v.status) && v.uitkomst !== 'GEEN VOORSTEL' && v.behandeld_at >= t).length,
     updateVraag: async (id, patch) => { Object.assign(d.verzoeken.find(v => v.id === id), patch); },
   };
 }

@@ -169,13 +169,13 @@ function stemmenVan(msgs) { return (msgs || []).filter(m => m.phase === 'stem' &
 let vraagBezig = false, logboekOpen = false;
 function vraagKaart() {
   const open = (D.vragen || []).filter(v => v.status === 'wacht' || v.status === 'gestart');
-  const recent = (D.vragen || []).filter(v => Date.now() - new Date(v.t) < 24 * 3600e3 && ['gestart', 'klaar', 'fout'].includes(v.status)).length;
+  const recent = (D.vragen || []).filter(v => Date.now() - new Date(v.behandeld_at || v.t) < 24 * 3600e3 && ['gestart', 'klaar'].includes(v.status) && v.uitkomst !== 'GEEN VOORSTEL').length;
   const over = Math.max(0, 5 - recent);
   const STATUS = { wacht: 'start binnen 5 minuten', gestart: 'zitting is bezig' };
   return `<div class="card vraag"><div class="card-b">
     <form class="vr-in" id="vraagForm"><input id="vraagIn" maxlength="300" placeholder="Moeten we in goud investeren?" aria-label="Vraag aan de zaal" autocomplete="off"><button type="submit" ${vraagBezig ? 'disabled' : ''}>${vraagBezig ? 'Versturen…' : 'Start zitting'}</button></form>
     <div class="vr-chips">${[['Goud', 'Moeten we in goud investeren?'], ['Bitcoin', 'Is dit een goed moment voor Bitcoin?'], ['Nvidia', 'Moeten we Nvidia kopen?'], ['Iets verkopen?', 'Moeten we iets verkopen?']].map(([l, q]) => `<button type="button" data-vraagvoorbeeld="${esc(q)}">${l}</button>`).join('')}</div>
-    ${open.map(v => `<div class="vr-open"><span class="dot ${v.status === 'gestart' ? 'red' : ''}"></span><b>${esc(v.vraag)}</b><span class="mut">${STATUS[v.status]}</span></div>`).join('')}
+    ${open.map(v => `<div class="vr-open"><span class="dot ${v.status === 'gestart' ? 'red' : ''}"></span><b>${esc(v.vraag)}</b><span class="mut">${esc(v.status === 'wacht' && v.reden ? v.reden : STATUS[v.status])}</span></div>`).join('')}
     <div class="vr-voet mut" id="vraagMelding">${over ? `Nog ${over} eigen zitting${over === 1 ? '' : 'en'} vandaag` : 'Je eigen zittingen voor vandaag zijn op'}</div>
   </div></div>`;
 }
@@ -194,7 +194,7 @@ function tegelsKaart(r, vz) {
   const vandaag = d => d && new Date(d).toDateString() === new Date().toDateString();
   const zitV = (D.rondes || []).filter(x => vandaag(x.started_at) && x.status !== 'fout').length, chkV = (D.voorzittingen || []).filter(x => vandaag(x.t)).length;
   return `<div class="tegels">
-    <a class="tegel" href="#zaal"><span class="eyebrow">${bezig ? 'Nu in de zaal' : 'Laatste zitting'}</span><b>${p ? `${esc(p.asset)} ${p.actie === 'KOOP' ? 'kopen' : 'verkopen'}` : bezig ? 'Debat loopt' : 'Nog geen'}</b>${r && !bezig ? `<span class="tag ${ok ? 'VOOR' : 'AF'}">${ok ? 'JA' : 'NEE'} · ${voor}–${n - voor}</span>` : bezig ? '<span class="tag ZIT">LIVE</span>' : ''}</a>
+    <a class="tegel" href="#zaal"><span class="eyebrow">${bezig ? 'Nu in de zaal' : 'Laatste zitting'}</span><b>${p ? `${esc(p.asset)} ${p.actie === 'KOOP' ? 'kopen' : 'verkopen'}` : bezig ? 'Debat loopt' : r ? 'Geen voorstel' : 'Nog geen'}</b>${bezig ? '<span class="tag ZIT">LIVE</span>' : r && p && r.votes_for != null ? `<span class="tag ${ok ? 'VOOR' : 'AF'}">${ok ? 'JA' : 'NEE'} · ${voor}–${n - voor}</span>` : r ? `<span class="tag NIKS">${r.status === 'fout' ? 'MISLUKT' : 'GEEN TRADE'}</span>` : ''}</a>
     <div class="tegel"><span class="eyebrow">Voorzitting ${vz ? tijd(vz.t) : ''}</span><b>${k ? `${esc(k.asset)} · kans ${k.score}/10` : vz ? 'Rustig uur' : 'Nog geen'}</b>${vz ? `<span class="tag ${vz.besluit === 'ZITTING' ? 'VOOR' : vz.besluit === 'RUSTIG' ? 'NIKS' : 'GEEL'}">${vz.besluit === 'ZITTING' ? 'ZITTING' : vz.besluit === 'RUSTIG' ? 'RUSTIG' : 'GEEN ZITTING'}</span>` : ''}</div>
     <div class="tegel"><span class="eyebrow">Volgende check</span><b id="tegelCheck">${String(volgendeRonde().getHours()).padStart(2, '0')}:00</b><span class="mut" style="font-size:11.5px">elk heel uur</span></div>
     <div class="tegel"><span class="eyebrow">Vandaag</span><b>${zitV} zitting${zitV === 1 ? '' : 'en'}</b><span class="mut" style="font-size:11.5px">${chkV} voorzitting${chkV === 1 ? '' : 'en'}</span></div>
@@ -211,7 +211,7 @@ function zittingKaart(r, msgs) {
   return `<div class="card"><div class="card-h"><h2>Laatste zitting</h2><span class="mono mut" style="font-size:12px">${r.spoed ? 'spoed' : 'zitting ' + esc(r.no)} · ${wanneer(r.started_at)}</span></div>
     <div class="card-b vakken" style="padding-top:6px">
       ${waarom ? `<div class="vak vak-waarom"><span class="eyebrow">Waarom</span><p>${esc(waarom)}</p></div>` : ''}
-      <div class="vak vak-tafel">${p ? `<div class="ico" style="background:${bg};color:${fg}">${esc(p.asset)}</div>` : ''}<div style="flex:1;min-width:0"><span class="eyebrow">Op tafel</span><div class="zk-wat">${p ? `${p.actie === 'KOOP' ? 'Kopen' : 'Verkopen'} <b>${eur(r.trade?.bedrag ?? p.bedrag, 0)} ${esc(p.asset)}</b>` : 'Geen voorstel'}</div></div>${uitkomstTag(r)}</div>
+      <div class="vak vak-tafel">${p ? `<div class="ico" style="background:${bg};color:${fg}">${esc(p.asset)}</div>` : ''}<div style="flex:1;min-width:0"><span class="eyebrow">Op tafel</span><div class="zk-wat">${p ? `${p.actie === 'KOOP' ? 'Kopen' : 'Verkopen'} <b>${eur(r.trade?.bedrag ?? p.bedrag, 0)} ${esc(p.asset)}</b>` : 'Geen voorstel'}</div>${!p && r.outcome === 'GEEN VOORSTEL' ? '<div class="mut" style="font-size:12.5px;margin-top:2px">De traders vonden geen trade die nu kon of verstandig was.</div>' : ''}</div>${uitkomstTag(r)}</div>
       ${r.votes_for != null ? `<div class="vak"><div class="zk-stand"><span class="up">${voor} voor</span><span class="mut">${NODIG_STEMMEN} nodig</span><span class="dn">${n - voor} tegen</span></div><div class="votebar dun"><i class="v" style="width:${voor / n * 100}%"></i><i class="t" style="width:${(n - voor) / n * 100}%"></i></div></div>` : ''}
       ${sv ? `<div class="vak arg v"><span class="eyebrow">Sterkste voor</span><p><b>${esc(naam(sv.id))}</b> ${esc(sv.reden)}</p></div>` : ''}
       ${stg ? `<div class="vak arg t"><span class="eyebrow">Sterkste tegen</span><p><b>${esc(naam(stg.id))}</b> ${esc(stg.reden)}</p></div>` : ''}
@@ -237,12 +237,15 @@ function renderHome() {
   $('#v-home').innerHTML = `<div class="home">
   ${g ? `<div class="alarm ${g.niveau}"><b>${esc(g.titel)}</b><span>${esc(g.tekst)}</span></div>` : ''}
   ${welkomKaart()}
+  <div class="home-grid"><div class="home-kol">
   ${pfKaart()}
   ${tegelsKaart(r, vz)}
   <div id="liveKaart"></div>
   <div id="vraagVak">${vraagKaart()}</div>
+  </div><div class="home-kol">
   ${zittingKaart(r, msgs)}
   <div id="logboek">${voorzittingenKaart()}</div>
+  </div></div>
   <div class="card"><div class="card-h"><h2>De zaal <span class="pill" id="livePill" style="padding:3px 8px;font-size:10px"><span class="dot red"></span>LIVE</span></h2><span class="mut" id="miniFase" style="font-size:12px"></span></div>
     <div id="aanleidingBalk"></div>
     <div class="zaal-mini" id="zaalMini"></div>
