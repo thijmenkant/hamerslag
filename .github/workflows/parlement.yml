@@ -42,7 +42,7 @@ jobs:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           APP_URL: ${{ vars.APP_URL }}
           SEC_CONTACT: ${{ vars.SEC_CONTACT }}
-          FORCEER: ${{ github.event_name == 'workflow_dispatch' && inputs.zitting && '1' || '' }}
+          FORCEER: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.zitting) != 'false' && '1' || '' }}
       - name: Melding als het misgaat
         if: failure()
         env:
