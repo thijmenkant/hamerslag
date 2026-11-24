@@ -1,4 +1,5 @@
 import { maakVoortgang } from './voortgang.js';
+import { maakUitleg } from './uitleg.js';
 import { bewaarIn } from './bronstatus.js';
 // Eén zitting van Hamerslag. Wordt gestart door de uurcheck (zittingscheck.js) of de nieuwsreflex.
 //   node run.js            → echte ronde (met sleutels uit de omgeving)
@@ -153,7 +154,7 @@ export async function ronde({ db = maakDb(), bronnen = verzamelBronnen, llm = ll
     await db.insertMessages(voorstellen.map(p => msg('voorstel', { trader_id: p.id, text: p.uitleg, sources: p.bronnen, action: { actie: p.actie, asset: p.asset, bedrag: p.bedrag, overtuiging: p.overtuiging, geweigerd: p.geweigerd } })));
     const voorstel = kiesVoorstel(voorstellen, staat, (a, s, _st, _pr, uitPot) => magHandelen(a, s, staat, prijzen, nu, uitPot), prijzen);
 
-    let uitkomst = 'GEEN VOORSTEL', voor = null, trade = null;
+    let uitkomst = 'GEEN VOORSTEL', voor = null, trade = null, tradeMelding = null;
     if (!voorstel) {
       await db.insertMessages([msg('uitslag', { trader_id: 'voorzitter', text: 'Geen geldig koop- of verkoopvoorstel. Het parlement doet deze ronde niets.' })]);
     } else {
@@ -247,7 +248,7 @@ export async function ronde({ db = maakDb(), bronnen = verzamelBronnen, llm = ll
           uitkomst = 'UITGEVOERD'; trade = r;
           await db.insertTrade({ round_id: round.id, t: nu.toISOString(), actie: r.actie, asset: r.asset, bedrag: r.bedrag, prijs: r.prijs, qty: r.qty, fee: r.fee, votes_for: voor });
           await db.insertMessages([msg('uitslag', { trader_id: 'voorzitter', text: `Aangenomen met ${voor} van ${actief.length}. ${r.actie} €${r.bedrag} ${r.asset} uitgevoerd${bp.bron === 'stemmers' && voorstel.actie === 'KOOP' ? ` (bedrag: het middelste van de voorstemmers, die zaten tussen €${bp.spreiding[0]} en €${bp.spreiding[1]})` : ''}${r.opgehoogd ? `, opgehoogd naar het minimum vanwege de vaste kosten` : ''}.`, action: { uitkomst, voor, bedrag: r.bedrag, voorgesteld: voorstel.bedrag } })]);
-          await push({ titel: `${r.actie === 'KOOP' ? 'Gekocht' : 'Verkocht'}: €${r.bedrag} ${r.asset}`, tekst: `Aangenomen met ${voor} van ${actief.length} stemmen${spoed ? ' (spoedzitting)' : ''}.`, prio: 4, tags: [r.actie === 'KOOP' ? 'green_circle' : 'red_circle'] });
+          tradeMelding = { titel: `${r.actie === 'KOOP' ? 'Gekocht' : 'Verkocht'}: €${r.bedrag} ${r.asset}`, tekst: `Aangenomen met ${voor} van ${actief.length} stemmen${spoed ? ' (spoedzitting)' : ''}.`, prio: 4, tags: [r.actie === 'KOOP' ? 'green_circle' : 'red_circle'] };
         } else {
           uitkomst = 'HUISREGEL';
           await db.insertMessages([msg('uitslag', { trader_id: 'voorzitter', text: `Aangenomen met ${voor} stemmen, maar geblokkeerd: ${r.reden}.`, action: { uitkomst, voor } })]);
@@ -256,6 +257,19 @@ export async function ronde({ db = maakDb(), bronnen = verzamelBronnen, llm = ll
         uitkomst = 'AFGEWEZEN';
         await db.insertMessages([msg('uitslag', { trader_id: 'voorzitter', text: `Afgewezen: ${voor} van ${actief.length} voor, ${nodig} nodig${voorstel.uitPot ? ' (geld uit de dividendpot)' : ''}.`, action: { uitkomst, voor } })]);
       }
+      // 9b. Uitleg in gewone taal: waarom, en wat verwachten we (komt in de app en in de melding)
+      let uitleg = null;
+      if (stemmen?.length) {
+        uitleg = await maakUitleg(llm, { voorstel, uitkomst, voor, nodig: voorstel.uitPot ? CONFIG.potStemmen : CONFIG.stemmenNodig, totaal: actief.length, stemmen, naamVan,
+          koers: marktRows.find(k => k.symbol === voorstel.asset), aanleiding, vraag: vraagA?.tekst?.replace(/^vraag van de eigenaar: /, '') });
+        if (uitleg) {
+          await db.insertMessages([msg('uitleg', { trader_id: 'voorzitter', text: uitleg.waarom, action: uitleg })]);
+          await db.updateRound(round.id, { proposal: { ...voorstel, uitleg_kort: uitleg } });
+          if (tradeMelding) tradeMelding = { ...tradeMelding, tekst: `${uitleg.waarom} Verwachting: ${uitleg.verwachting}`.slice(0, 240) };
+        }
+      }
+      if (tradeMelding) await push(tradeMelding);
+
     }
 
     // 10. Opslaan (met de koersen van nu, zodat de zittingscheck kan zien wat er sindsdien bewoog)

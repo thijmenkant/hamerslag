@@ -507,3 +507,9 @@ button.tl-it{cursor:pointer}button.tl-it:hover{border-color:var(--line2)}
 .meld-balk button.x{background:none;color:var(--mut2);padding:6px}
 #meldBalk:empty{display:none}
 .card-b button.btn{width:100%;padding:12px 16px;border:0;cursor:pointer;font-family:inherit;min-height:46px}
+
+/* Uitleg in gewone taal */
+.vak.uitleg{background:var(--card);border:1px solid var(--line2);display:flex;flex-direction:column;gap:10px}
+.ul-r{display:flex;gap:10px;align-items:flex-start}.ul-i{font-size:16px;line-height:1.2;flex:none;width:22px;text-align:center}
+.ul-r .eyebrow{display:block}.ul-r p{font-size:13.5px;line-height:1.5;margin-top:2px;color:var(--tx)}
+.tl-waarom{font-size:12.5px;color:var(--mut);margin-top:4px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}

@@ -307,6 +307,16 @@ function tegelsKaart(r, vz) {
     <div class="tegel"><span class="eyebrow">Vandaag</span><b>${zitV} zitting${zitV === 1 ? '' : 'en'}</b><span class="mut" style="font-size:11.5px">${chkV} voorzitting${chkV === 1 ? '' : 'en'}</span></div>
   </div>`;
 }
+const uitlegVan = (r, msgs = []) => r?.proposal?.uitleg_kort || (msgs.find(m => m.phase === 'uitleg')?.action) || null;
+function uitlegBlok(u, r) {
+  if (!u) return '';
+  const ok = r.outcome === 'UITGEVOERD', koop = r.proposal?.actie === 'KOOP';
+  return `<div class="vak uitleg">
+    <div class="ul-r"><span class="ul-i">💬</span><div><span class="eyebrow">${ok ? (koop ? 'Waarom gekocht' : 'Waarom verkocht') : 'Waarom afgewezen'}</span><p>${esc(u.waarom)}</p></div></div>
+    ${u.verwachting ? `<div class="ul-r"><span class="ul-i">🔮</span><div><span class="eyebrow">Verwachting</span><p>${esc(u.verwachting)}</p></div></div>` : ''}
+    ${u.plan ? `<div class="ul-r"><span class="ul-i">📌</span><div><span class="eyebrow">Plan</span><p>${esc(u.plan)}</p></div></div>` : ''}
+  </div>`;
+}
 function zittingInhoud(r, msgs, { kort = false } = {}) {
   if (!r) return '';
   const p = r.proposal, ok = r.outcome === 'UITGEVOERD', n = actieveTraders().length || 10, voor = Number(r.votes_for ?? 0);
@@ -316,7 +326,8 @@ function zittingInhoud(r, msgs, { kort = false } = {}) {
   const vraag = (r.aanleiding || []).find(a => a.soort === 'vraag');
   const waarom = vraag ? vraag.tekst.replace(/^vraag van de eigenaar: /, 'Jouw vraag: ') : r.spoed ? `Spoednieuws: ${r.spoed.titel}` : (r.aanleiding || []).filter(a => a.soort !== 'agenda').map(a => a.tekst).join(' · ');
   return `<div class="vakken">
-      ${waarom ? `<div class="vak vak-waarom"><span class="eyebrow">Waarom</span><p>${esc(waarom)}</p></div>` : ''}
+      ${uitlegBlok(uitlegVan(r, msgs), r)}
+      ${waarom ? `<div class="vak vak-waarom"><span class="eyebrow">Aanleiding</span><p>${esc(waarom)}</p></div>` : ''}
       <div class="vak vak-tafel">${p ? `<div class="ico" style="background:${bg};color:${fg}">${esc(p.asset)}</div>` : ''}<div style="flex:1;min-width:0"><span class="eyebrow">Op tafel</span><div class="zk-wat">${p ? `${p.actie === 'KOOP' ? 'Kopen' : 'Verkopen'} <b>${eur(r.trade?.bedrag ?? p.bedrag, 0)} ${esc(p.asset)}</b>` : 'Geen voorstel'}</div>${!p && r.outcome === 'GEEN VOORSTEL' ? '<div class="mut" style="font-size:12.5px;margin-top:2px">De traders vonden geen trade die nu kon of verstandig was.</div>' : ''}</div>${kort ? '' : uitkomstTag(r)}</div>
       ${r.votes_for != null ? `<div class="vak"><div class="zk-stand"><span class="up">${voor} voor</span><span class="mut">${NODIG_STEMMEN} nodig</span><span class="dn">${n - voor} tegen</span></div><div class="votebar dun"><i class="v" style="width:${voor / n * 100}%"></i><i class="t" style="width:${(n - voor) / n * 100}%"></i></div></div>` : ''}
       ${sv ? `<div class="vak arg v"><span class="eyebrow">Sterkste voor</span><p><b>${esc(naam(sv.id))}</b> ${esc(sv.reden)}</p></div>` : ''}
@@ -364,7 +375,7 @@ function tlZitting(r, nieuwste) {
   return `<div class="tl-it tl-zit k-${tlKleurZit(r)} ${open ? 'open' : ''}">
     <button type="button" class="tl-rij tl-kop" ${nieuwste ? '' : `data-tlopen="z${r.id}"`}><span class="mono tl-t">${tijd(r.started_at)}</span><span class="tl-naam">${r.spoed ? 'Spoedzitting' : 'Zitting ' + esc(r.no)}</span><span class="tl-uit">${tlUitkomst(r)}</span>${nieuwste ? '' : `<span class="tl-pijl">${open ? '▴' : '▾'}</span>`}</button>
     ${vraag && !open ? `<div class="tl-vraag">Jouw vraag: ${esc((r.aanleiding.find(a => a.soort === 'vraag').tekst || '').replace(/^vraag van de eigenaar: /, ''))}</div>` : ''}
-    ${open ? zittingInhoud(r, msgs, { kort: true }) : `<div class="tl-ond"><b>${p ? `${p.actie === 'KOOP' ? 'Kopen' : 'Verkopen'} ${eur(p.bedrag, 0)} ${esc(p.asset)}` : r.status === 'fout' ? 'Technische fout, telde niet mee' : 'Geen voorstel'}</b>${r.votes_for != null ? ` · ${voor} voor, ${n - voor} tegen` : ''}</div>`}
+    ${open ? zittingInhoud(r, msgs, { kort: true }) : `<div class="tl-ond"><b>${p ? `${p.actie === 'KOOP' ? 'Kopen' : 'Verkopen'} ${eur(p.bedrag, 0)} ${esc(p.asset)}` : r.status === 'fout' ? 'Technische fout, telde niet mee' : 'Geen voorstel'}</b>${r.votes_for != null ? ` · ${voor} voor, ${n - voor} tegen` : ''}</div>${uitlegVan(r) ? `<div class="tl-waarom">${esc(uitlegVan(r).waarom)}</div>` : ''}`}
   </div>`;
 }
 function tijdlijnKaart() {
