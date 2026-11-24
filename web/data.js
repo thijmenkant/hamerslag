@@ -33,7 +33,7 @@ export async function laad() {
     const d = await import('./demo.js');
     return {
       demo: true, traders: d.DEMO_TRADERS, market: d.DEMO_MARKET, state: d.DEMO_STATE, snapshots: d.DEMO_SNAPSHOTS,
-      trades: d.DEMO_TRADES.slice().reverse(), headlines: d.DEMO_HEADLINES, round: d.DEMO_ROUND, besluit: d.DEMO_ROUND,
+      trades: d.DEMO_TRADES.slice().reverse(), headlines: d.DEMO_HEADLINES, round: d.DEMO_ROUND, besluit: d.DEMO_ROUND, rondes: [{ id: 14, ...d.DEMO_ROUND }],
       messages: d.DEMO_MESSAGES, sources: d.DEMO_SOURCES, voorzittingen: d.DEMO_VOORZITTINGEN,
     };
   }
@@ -47,11 +47,13 @@ export async function laad() {
     q(c.from('snapshots').select('t,value,bench,cash').order('t', { ascending: false }).limit(2000)),
     q(c.from('trades').select('*').order('t', { ascending: false }).limit(50)),
     q(c.from('headlines').select('*').gte('published_at', sinds).order('importance', { ascending: false }).order('published_at', { ascending: false }).limit(20)),
-    q(c.from('rounds').select('*').order('id', { ascending: false }).limit(2)),
-    q(c.from('voorzittingen').select('*').order('id', { ascending: false }).limit(12)),
+    q(c.from('rounds').select('*').order('id', { ascending: false }).limit(30)),
+    q(c.from('voorzittingen').select('*').order('id', { ascending: false }).limit(48)),
   ]);
   // Laatste afgeronde of lopende ronde
-  const round = rounds.find(r => r.status === 'bezig') || rounds.find(r => r.status === 'klaar') || rounds[0] || null;
+  // 'bezig' telt alleen als hij nog vers is: een zitting die ooit halverwege stopte blijft anders eeuwig 'live'
+  const vers = r => r.status === 'bezig' && Date.now() - new Date(r.started_at) < 30 * 60000;
+  const round = rounds.find(vers) || rounds.find(r => r.status === 'klaar') || rounds[0] || null;
   let messages = [], sources = {};
   if (round) {
     const [m, s] = await Promise.all([
@@ -60,7 +62,7 @@ export async function laad() {
     ]);
     messages = m; sources = Object.fromEntries(s.map(x => [x.id, x]));
   }
-  return { demo: false, traders, market, state, snapshots: snapshots.reverse(), trades, headlines, round, laatste: rounds[0] || null, besluit: rounds.find(r => r.status === 'klaar') || null, voorzittingen, messages, sources };
+  return { demo: false, traders, market, state, snapshots: snapshots.reverse(), trades, headlines, round, laatste: rounds[0] || null, besluit: rounds.find(r => r.status === 'klaar') || null, rondes: rounds, voorzittingen, messages, sources };
 }
 
 // Live updates: nieuwe berichten, rondes en koersen
@@ -79,4 +81,16 @@ export async function bronnenVoorRonde(roundId) {
   const c = await client();
   const { data } = await c.from('sources').select('*').eq('round_id', roundId);
   return Object.fromEntries((data || []).map(x => [x.id, x]));
+}
+
+// Een oudere zitting terugkijken: alle berichten en bronnen van die ene ronde
+export async function laadRonde(id) {
+  if (!isLive()) { const d = await import('./demo.js'); return { messages: d.DEMO_MESSAGES, sources: d.DEMO_SOURCES }; }
+  const c = await client();
+  const [m, s] = await Promise.all([
+    c.from('messages').select('*').eq('round_id', id).order('seq'),
+    c.from('sources').select('*').eq('round_id', id),
+  ]);
+  if (m.error) throw m.error;
+  return { messages: m.data || [], sources: Object.fromEntries((s.data || []).map(x => [x.id, x])) };
 }

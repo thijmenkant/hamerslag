@@ -1,5 +1,5 @@
 import { avatarUrl } from './avatar.js';
-import { laad, abonneer, isLive, session, login, bronnenVoorRonde } from './data.js';
+import { laad, abonneer, isLive, session, login, bronnenVoorRonde, laadRonde } from './data.js';
 import { Speler } from './player.js';
 
 // ---------- helpers ----------
@@ -195,7 +195,7 @@ function renderHome() {
 
       <div class="card" id="voorstelCard"></div>
       <div class="card" id="argumentenCard" hidden></div>
-      ${voorzittingKaart()}
+      <div id="logboek">${logboekKaart()}</div>
     </div>
     <div class="col">
       ${k ? `<div class="card"><div class="card-h"><h2>AI-kosten deze maand</h2><span class="chip ${kostPct >= 0.7 ? 'dn' : ''}">${kostPct >= 0.7 ? 'spaarstand' : 'normaal'}</span></div>
@@ -292,17 +292,68 @@ function updateMini(s) {
   renderVoorstel(s);
   renderArgumenten(s);
 }
-// Uurcheck en voorzitting: wat er elk uur gebeurde en waarom er wel of geen zitting kwam
-function voorzittingKaart() {
-  const lijst = D.voorzittingen || []; if (!lijst.length) return '';
-  const BES = { ZITTING: ['VOOR', 'Zitting'], GEEN_ZITTING: ['NIKS', 'Geen zitting'], RUSTIG: ['NIKS', 'Rustig'] };
-  return `<div class="card"><div class="card-h"><h2>Elk uur: is er een zitting nodig?</h2></div>
-    <p class="mut" style="font-size:12.5px;padding:0 16px">Elk uur kijkt de app of er iets gebeurt. Zo ja, dan bekijken Voorzitter Eva, Daan en Noor eerst de kansen. Alleen bij een echte kans (score 6 of hoger) komt er een zitting.</p>
-    ${lijst.slice(0, 6).map(v => { const [cls, lbl] = BES[v.besluit] || ['NIKS', v.besluit]; return `<div class="vz"><div class="vzt"><span class="mono">${tijd(v.t)}</span><span class="tag ${cls}">${lbl}</span>${v.besluit !== 'RUSTIG' ? `<span class="modeltag ${/haiku/.test(v.model || '') ? 'haiku' : 'sonnet'}">${/haiku/.test(v.model || '') ? 'Haiku 5.5' : 'Sonnet 5.5'}</span>` : ''}</div>
-      ${v.aanleiding?.length ? `<div class="vza">${v.aanleiding.slice(0, 3).map(a => `<span class="chip">${esc(a.tekst)}</span>`).join('')}</div>` : ''}
-      ${(v.kansen || []).map(k => `<div class="vzk"><b>${esc(k.asset)}</b> <span class="tag ${k.richting === 'VERKOOP' ? 'VERKOOP' : 'KOOP'}">${esc(k.richting)}</span><span class="score ${k.score >= 6 ? 'hoog' : ''}">${k.score}/10</span><span class="mut">${esc(k.waarom)}</span></div>`).join('')}
-      ${v.reden ? `<div class="mut" style="font-size:12px">${esc(v.reden)}</div>` : ''}</div>`; }).join('')}
+// Logboek: alle zittingen (standaard) of alles wat er elk uur gebeurde, met de voorzittingen ertussen
+let logFilter = 'zittingen', logOpen = null;
+const NODIG = 6;
+function wanneer(t) {
+  const d = new Date(t), nu = new Date(), gist = new Date(nu); gist.setDate(nu.getDate() - 1);
+  const zelfde = (a, b) => a.toDateString() === b.toDateString();
+  return zelfde(d, nu) ? tijd(t) : zelfde(d, gist) ? `gisteren ${tijd(t)}` : `${d.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' })} ${tijd(t)}`;
+}
+function uitkomstTag(r) {
+  if (r.status === 'fout') return '<span class="tag AF">MISLUKT</span>';
+  if (r.status === 'bezig') return '<span class="tag ZIT">NU LIVE</span>';
+  if (r.outcome === 'UITGEVOERD') return '<span class="tag VOOR">AANGENOMEN</span>';
+  if (r.outcome === 'AFGEWEZEN') return '<span class="tag AF">AFGEWEZEN</span>';
+  return `<span class="tag NIKS">${esc(r.outcome || 'GEEN TRADE')}</span>`;
+}
+const opTafel = p => p ? `${p.actie === 'VERKOOP' ? 'Verkopen' : 'Kopen'}: ${esc(p.asset)} voor ${eur(p.bedrag, 0)}` : 'Geen voorstel op tafel';
+function logZitting(r, open) {
+  const p = r.proposal, n = actieveTraders().length || 10, voor = Number(r.votes_for ?? 0);
+  const kop = `<div class="lg-kop"><span class="mono mut">${wanneer(r.started_at)}</span><span class="tag ZIT">${r.spoed ? 'SPOEDZITTING' : 'ZITTING ' + esc(r.no)}</span><span class="lg-rechts">${uitkomstTag(r)}</span></div>`;
+  if (!open) return `<button type="button" class="lg-item lg-zit dicht" data-logopen="${r.id}">${kop}
+    <div class="lg-rij"><b>${opTafel(p)}</b>${r.votes_for != null ? `<span class="mut">· ${voor} voor, ${n - voor} tegen</span>` : ''}<span class="lg-pijl" aria-hidden="true">⌄</span></div></button>`;
+  const waarom = r.spoed ? [`${r.spoed.titel} (${r.spoed.uitgever || 'nieuws'})`] : (r.aanleiding || []).map(a => a.tekst);
+  const door = p?.door ? (traderMap[p.door]?.name || p.door) : null;
+  return `<div class="lg-item lg-zit">${kop}
+    <div class="lg-l">Waarom deze zitting</div><div class="lg-waarom">${waarom.length ? waarom.map(esc).join(' · ') : 'Geen aanleiding opgeslagen'}</div>
+    <div class="lg-l">Op tafel</div><div class="lg-tafel">${opTafel(p)}${door ? ` <span class="mut">· voorstel van ${esc(door)}</span>` : ''}</div>
+    ${r.votes_for != null ? `<div class="votebar"><i class="v" style="width:${voor / n * 100}%"></i><i class="t" style="width:${(n - voor) / n * 100}%"></i></div>
+    <div class="lg-stem"><span>${voor} voor</span><span>${n - voor} tegen · ${NODIG} nodig</span></div>` : ''}
+    ${r.status === 'fout' ? `<div class="mut" style="font-size:12.5px">Deze zitting liep vast door een technische fout en telde niet mee.</div>` : ''}
+    ${r.status !== 'fout' ? `<button type="button" class="btn" data-logdebat="${r.id}">Bekijk het hele debat →</button>` : ''}
   </div>`;
+}
+function logCheck(v) {
+  if (v.besluit === 'RUSTIG') return `<div class="lg-item lg-rust"><span class="mono mut">${wanneer(v.t)}</span><span class="tag NIKS">RUSTIG</span><span class="mut">Niets bewogen, geen nieuw nieuws</span></div>`;
+  const zit = v.besluit === 'ZITTING';
+  return `<div class="lg-item lg-check"><div class="lg-kop"><span class="mono mut">${wanneer(v.t)}</span><span class="tag ${zit ? 'VOOR' : 'GEEL'}">VOORZITTING · ${zit ? 'ZITTING' : 'GEEN ZITTING'}</span></div>
+    ${v.aanleiding?.length ? `<div class="lg-l">Onderwerp</div><div class="lg-onderwerp">${v.aanleiding.slice(0, 3).map(a => esc(a.tekst)).join('<br>')}</div>` : ''}
+    ${(v.kansen || []).map(k => `<div class="lg-kans"><b>${esc(k.asset)}</b><span class="tag ${k.richting === 'VERKOOP' ? 'VERKOOP' : 'KOOP'}">${esc(k.richting)}</span><span class="mut">kans ${k.score}/10 · nodig 6</span><span class="lg-meter"><i style="width:${Math.min(10, k.score) * 10}%" class="${k.score >= 6 ? 'hoog' : ''}"></i></span></div>`).join('')}
+    ${v.reden ? `<div class="lg-reden">Voorzitter Eva: ${esc(v.reden)}</div>` : ''}</div>`;
+}
+function logboekKaart() {
+  const rondes = (D.rondes || []).filter(r => r.status !== 'bezig' || Date.now() - new Date(r.started_at) < 30 * 60000);
+  const checks = D.voorzittingen || [];
+  if (!rondes.length && !checks.length) return '';
+  const eerste = rondes[0]?.id;
+  const items = logFilter === 'zittingen'
+    ? rondes.map(r => ({ t: r.started_at, html: logZitting(r, (logOpen ?? eerste) === r.id) }))
+    : [...rondes.map(r => ({ t: r.started_at, html: logZitting(r, (logOpen ?? eerste) === r.id) })), ...checks.map(v => ({ t: v.t, html: logCheck(v) }))].sort((a, b) => new Date(b.t) - new Date(a.t));
+  return `<div class="card logboek"><div class="card-h"><h2>Logboek</h2><div class="lg-filter">
+      <button type="button" data-logf="zittingen" class="${logFilter === 'zittingen' ? 'on' : ''}">Zittingen</button>
+      <button type="button" data-logf="alles" class="${logFilter === 'alles' ? 'on' : ''}">Alles</button></div></div>
+    <div class="lg-lijst">${items.map(i => i.html).join('') || '<p class="mut" style="padding:6px 0">Nog geen zittingen. Tik op Alles om de uurchecks te zien.</p>'}</div>
+    ${logFilter === 'alles' ? '<p class="mut lg-voet">Elk uur kijkt de app of er iets gebeurt. Zo ja, dan bekijken Voorzitter Eva, Daan en Noor de kansen. Alleen bij een kans van 6 of hoger komt er een zitting.</p>' : ''}
+  </div>`;
+}
+const tekenLogboek = () => { const el = $('#logboek'); if (el) el.innerHTML = logboekKaart(); };
+async function bekijkDebat(id) {
+  const r = (D.rondes || []).find(x => x.id === id); if (!r) return;
+  const { messages, sources } = await laadRonde(id);
+  D.round = r; D.messages = messages; D.sources = sources;
+  speler.reset(r); speler.eindstand(r, messages);
+  location.hash = '#zaal';
 }
 // Na de stemming: alle argumenten voor en tegen, per trader
 function argumentLijst(s) {
@@ -561,6 +612,12 @@ document.addEventListener('click', e => {
   if (ms) { marktSort = ms.dataset.msort; tekenMarktLijst(); return; }
   const mo = e.target.closest('[data-mopen]');
   if (mo) { marktOpen = marktOpen === mo.dataset.mopen ? null : mo.dataset.mopen; tekenMarktLijst(); return; }
+  const lf = e.target.closest('[data-logf]');
+  if (lf) { logFilter = lf.dataset.logf; tekenLogboek(); return; }
+  const lo = e.target.closest('[data-logopen]');
+  if (lo) { logOpen = Number(lo.dataset.logopen); tekenLogboek(); return; }
+  const ld = e.target.closest('[data-logdebat]');
+  if (ld) { ld.textContent = 'Debat laden…'; bekijkDebat(Number(ld.dataset.logdebat)).catch(err => { ld.textContent = 'Laden mislukt, probeer opnieuw'; console.error(err); }); return; }
   const k = e.target.closest('[data-bereik]');
   if (k) { bereik = k.dataset.bereik; renderPortefeuille(); }
 });
@@ -607,6 +664,7 @@ const MAX_UUR = { '5min': 1, uur: 3, zitting: 26, dag: 50 };
 function bronLamp(b, s) {
   if (!s) return { kleur: 'grijs', tekst: 'Nog niet gebruikt' };
   if (s.uit) return { kleur: 'grijs', tekst: s.melding || 'Niet ingesteld' };
+  if (s.ok === false && (Date.now() - new Date(s.t)) / 3600e3 > 6) return { kleur: 'grijs', tekst: `Laatste poging ${geleden(s.t)} mislukt, sindsdien niet meer nodig geweest` };
   if (s.ok === false) return { kleur: 'rood', tekst: s.melding || 'Werkt niet' };
   const uur = (Date.now() - new Date(s.t)) / 3600e3;
   if (uur > MAX_UUR[b.elk]) return { kleur: 'oranje', tekst: `Laatst gelukt ${geleden(s.t)}` };

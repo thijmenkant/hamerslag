@@ -142,6 +142,11 @@ export async function zittingscheck({ db = maakDb(), koersen = alleKoersen, nieu
   const staat = (await db.loadState()) || {};
   const rondes = await db.laatsteRondes();
   const laatste = rondes[0];
+  // Een zitting die halverwege stopte (runner weg, time-out) blijft anders eeuwig op 'bezig' staan
+  for (const r of rondes.filter(r => r.status === 'bezig' && (nu - new Date(r.started_at)) / 60000 > 30)) {
+    await db.updateRound(r.id, { status: 'fout', phase: 'fout', error: 'Zitting is halverwege gestopt', finished_at: nu.toISOString() }).catch(() => {});
+    r.status = 'fout'; log(`uurcheck: zitting ${r.id} hing nog op 'bezig', afgesloten als mislukt`);
+  }
   if (forceer) {
     const a = [{ soort: 'handmatig', tekst: 'handmatig gestart' }];
     log('uurcheck: handmatig gestart, direct een zitting');
