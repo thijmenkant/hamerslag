@@ -260,7 +260,7 @@ export async function ronde({ db = maakDb(), bronnen = verzamelBronnen, llm = ll
       // 9b. Uitleg in gewone taal: waarom, en wat verwachten we (komt in de app en in de melding)
       let uitleg = null;
       if (stemmen?.length) {
-        uitleg = await maakUitleg(llm, { voorstel, uitkomst, voor, nodig: voorstel.uitPot ? CONFIG.potStemmen : CONFIG.stemmenNodig, totaal: actief.length, stemmen, naamVan,
+        uitleg = await maakUitleg(llm, { voorstel: trade ? { ...voorstel, bedrag: trade.bedrag } : voorstel, uitkomst, voor, nodig: voorstel.uitPot ? CONFIG.potStemmen : CONFIG.stemmenNodig, totaal: actief.length, stemmen, naamVan,
           koers: marktRows.find(k => k.symbol === voorstel.asset), aanleiding, vraag: vraagA?.tekst?.replace(/^vraag van de eigenaar: /, '') });
         if (uitleg) {
           await db.insertMessages([msg('uitleg', { trader_id: 'voorzitter', text: uitleg.waarom, action: uitleg })]);

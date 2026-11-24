@@ -16,7 +16,7 @@ for (const r of await db.rondesMetVoorstel()) {
   if (!stemmen.length) continue;
   const vraag = (r.aanleiding || []).find(a => a.soort === 'vraag')?.tekst?.replace(/^vraag van de eigenaar: /, '');
   const { uitleg_kort, ...voorstel } = p;
-  const uitleg = await maakUitleg(llm, { voorstel, uitkomst: r.outcome, voor: r.votes_for, nodig: p.uitPot ? CONFIG.potStemmen : CONFIG.stemmenNodig, totaal: stemmen.length,
+  const uitleg = await maakUitleg(llm, { voorstel: r.trade?.bedrag ? { ...voorstel, bedrag: r.trade.bedrag } : voorstel, uitkomst: r.outcome, voor: r.votes_for, nodig: p.uitPot ? CONFIG.potStemmen : CONFIG.stemmenNodig, totaal: stemmen.length,
     stemmen, naamVan: id => traders[id] || id, koers: markt.find(m => m.symbol === p.asset), aanleiding: r.aanleiding, vraag });
   if (!uitleg) { console.log(`zitting ${r.no}: geen uitleg gelukt`); continue; }
   await db.updateRound(r.id, { proposal: { ...p, uitleg_kort: uitleg } });
