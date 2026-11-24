@@ -146,7 +146,7 @@ assert.equal(modellen.noor, 'claude-sonnet-5-5', 'spaarstand: Opus wordt Sonnet'
 const meldingen = [];
 d.state.kosten.eur = 51;
 const rb = await ronde({ db, bronnen, llm, beurtPauze: 0, nu: new Date(spaarNu.getTime() + 3600000), push: async m => meldingen.push(m) });
-assert.equal(rb.uitkomst, 'BUDGET'); assert.ok(meldingen.some(m => m.titel.includes('gepauzeerd')), 'pushmelding bij budget op');
+assert.equal(rb.uitkomst, 'BUDGET'); assert.ok(meldingen.some(m => m.titel.includes('pauzeert')), 'pushmelding bij budget op');
 d.state.kosten.eur = 0; d.state.kosten.gestopt = false; d.state.kosten.gemeld70 = false;
 
 // ---------- Dividend, dividendpot en staking ----------

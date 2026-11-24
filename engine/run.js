@@ -1,5 +1,5 @@
 import { maakVoortgang } from './voortgang.js';
-import { maakUitleg } from './uitleg.js';
+import { maakUitleg, simpelNieuws } from './uitleg.js';
 import { bewaarIn } from './bronstatus.js';
 // Eén zitting van Hamerslag. Wordt gestart door de uurcheck (zittingscheck.js) of de nieuwsreflex.
 //   node run.js            → echte ronde (met sleutels uit de omgeving)
@@ -65,7 +65,7 @@ export async function ronde({ db = maakDb(), bronnen = verzamelBronnen, llm = ll
   staat.kosten.usdEur = ruw.usdEur?.koers || staat.kosten.usdEur || 0.93;
   staat.kosten.budget = CONFIG.budgetEur;
   if (staat.kosten.eur >= CONFIG.budgetEur) {
-    if (!staat.kosten.gestopt) { staat.kosten.gestopt = true; await push({ titel: 'Hamerslag gepauzeerd', tekst: `Het maandbudget van €${CONFIG.budgetEur} is op (€${staat.kosten.eur.toFixed(2)}). Volgende maand gaat het vanzelf verder.`, prio: 5, tags: ['money_with_wings'] }); }
+    if (!staat.kosten.gestopt) { staat.kosten.gestopt = true; await push({ titel: 'Hamerslag pauzeert', tekst: `Het AI-budget van €${CONFIG.budgetEur} voor deze maand is op. Volgende maand gaat het vanzelf verder.`, prio: 5 }); }
     bewaarIn(staat); await db.saveState(staat);
     log(`budget op: €${staat.kosten.eur.toFixed(2)} van €${CONFIG.budgetEur}, geen ronde`);
     await vg.stop();
@@ -79,7 +79,7 @@ export async function ronde({ db = maakDb(), bronnen = verzamelBronnen, llm = ll
   const stakingEur = verwerkStaking(staat, prijzen, nu);
   const dividendBetaald = verwerkDividend(staat, prijzen, ruw.usdEur?.koers || staat.kosten.usdEur || 0.93, nu);
   if (stakingEur > 0.005) log(`staking: +€${stakingEur.toFixed(3)}`);
-  for (const d of dividendBetaald) { log(`dividend ${d.sym}: +€${d.eur}`); await push({ titel: `Dividend: €${d.eur.toFixed(2)} van ${d.sym}`, tekst: `Na 15% dividendbelasting in de dividendpot (nu €${staat.pot.toFixed(2)}).`, prio: 3, tags: ['moneybag'] }); }
+  for (const d of dividendBetaald) { log(`dividend ${d.sym}: +€${d.eur}`); await push({ titel: `Dividend ontvangen: €${d.eur.toFixed(2).replace('.', ',')}`, tekst: `Van ${d.sym}. Het staat in de dividendpot.`, prio: 3 }); }
   for (const d of dividendInfo(staat, radar, nu)) {
     pakket.push({ id: `B${pakket.length + 1}`, kind: 'dividend', publisher: d.soort === 'exact' ? 'Financial Modeling Prep' : 'Finnhub (schatting)', title: d.tekst, url: d.soort === 'exact' ? `https://financialmodelingprep.com/financial-summary/${d.sym}` : `https://finnhub.io/quote/${d.sym}`, published_at: nu.toISOString(), data: { sym: d.sym } });
   }
@@ -89,7 +89,7 @@ export async function ronde({ db = maakDb(), bronnen = verzamelBronnen, llm = ll
     staat.kosten.eur = Math.round(staat.kosten.usd * staat.kosten.usdEur * 100) / 100;
     if (!staat.kosten.gemeld70 && staat.kosten.eur >= CONFIG.budgetEur * CONFIG.spaarstandVanaf) {
       staat.kosten.gemeld70 = true;
-      await push({ titel: 'Spaarstand aan', tekst: `AI-kosten deze maand: €${staat.kosten.eur.toFixed(2)} van €${CONFIG.budgetEur}. Opus-traders stemmen nu met Sonnet.`, prio: 4, tags: ['warning'] });
+      await push({ titel: 'Hamerslag gaat zuiniger', tekst: `Het AI-budget voor deze maand is bijna op. De traders denken nu goedkoper na.`, prio: 4 });
     }
   };
   const stats = {};
@@ -108,7 +108,7 @@ export async function ronde({ db = maakDb(), bronnen = verzamelBronnen, llm = ll
       await db.upsertTraders([{ id: weg.t.id, active: false, left_at: nu.toISOString(), left_reason: `Score ${Math.round(weg.score * 100)}% na ${weg.n} beoordelingen` }, nieuw]);
       actief = [...actief.filter(t => t.id !== weg.t.id), nieuw];
       wissel.push(`${weg.t.name} verlaat de zaal (${Math.round(weg.score * 100)}%). Welkom ${nieuw.name}, ${nieuw.role}!`);
-      await push({ titel: 'Maandwissel', tekst: wissel[0], prio: 3, tags: ['arrows_counterclockwise'] });
+      await push({ titel: 'Nieuwe trader in de zaal', tekst: `${weg.t.name} scoorde het slechtst en vertrekt. ${nieuw.name} neemt het over.`, prio: 3 });
       log('maandwissel:', wissel[0]);
     }
     staat.last_rotation = maandCode(nu);
@@ -126,9 +126,12 @@ export async function ronde({ db = maakDb(), bronnen = verzamelBronnen, llm = ll
     await db.insertTrade({ round_id: round.id, t: nu.toISOString(), actie: 'VERKOOP', asset: v.asset, bedrag: v.bedrag, prijs: v.prijs, qty: v.qty, fee: v.fee, votes_for: null });
     await db.insertMessages([msg('systeem', { text: `${v.reden === 'stop-loss' ? 'Stop-loss' : 'Winstdoel'}: ${v.asset} automatisch verkocht voor €${v.bedrag} (${(v.resultaat * 100).toFixed(1)}%).`, action: { vangnet: v.reden, asset: v.asset } })]);
     log(`vangnet ${v.reden}: ${v.asset} verkocht`);
-    await push({ titel: v.reden === 'stop-loss' ? `Stop-loss: ${v.asset} verkocht` : `Winst gepakt: ${v.asset} verkocht`, tekst: `€${v.bedrag} (${(v.resultaat * 100).toFixed(1)}%), automatisch zonder debat.`, prio: 4, tags: [v.reden === 'stop-loss' ? 'chart_with_downwards_trend' : 'moneybag'] });
+    await push({ titel: v.reden === 'stop-loss' ? `${v.asset} verkocht met verlies` : `${v.asset} verkocht met winst`, tekst: v.reden === 'stop-loss' ? `De koers zakte ${Math.abs(v.resultaat * 100).toFixed(0)}%. We hebben automatisch verkocht zodat het verlies niet groter wordt.` : `De koers steeg ${(v.resultaat * 100).toFixed(0)}%. We hebben de winst automatisch binnengehaald.`, prio: 4 });
   }
-  if (spoed) await push({ titel: 'Spoedzitting', tekst: `${spoed.titel} (${spoed.uitgever || 'nieuws'})`, prio: 4, tags: ['rotating_light'] });
+  if (spoed) {
+    const zin = await simpelNieuws(llm, spoed.titel);
+    await push({ titel: `Spoedzitting${spoed.assets?.[0] && spoed.assets[0] !== 'MARKT' ? ` over ${spoed.assets[0]}` : ''}`, tekst: `${zin || 'Er is belangrijk nieuws.'} De traders kijken nu of we iets moeten doen.`, prio: 4 });
+  }
   await db.insertMessages([
     ...(spoed ? [msg('systeem', { text: `SPOEDZITTING: ${spoed.titel}`, action: { spoed: true, titel: spoed.titel, url: spoed.url, uitgever: spoed.uitgever, assets: spoed.assets } })] : []),
     msg('systeem', { text: `Ronde ${no} geopend. ${pakket.length} bronnen geladen.` }),
@@ -154,7 +157,7 @@ export async function ronde({ db = maakDb(), bronnen = verzamelBronnen, llm = ll
     await db.insertMessages(voorstellen.map(p => msg('voorstel', { trader_id: p.id, text: p.uitleg, sources: p.bronnen, action: { actie: p.actie, asset: p.asset, bedrag: p.bedrag, overtuiging: p.overtuiging, geweigerd: p.geweigerd } })));
     const voorstel = kiesVoorstel(voorstellen, staat, (a, s, _st, _pr, uitPot) => magHandelen(a, s, staat, prijzen, nu, uitPot), prijzen);
 
-    let uitkomst = 'GEEN VOORSTEL', voor = null, trade = null, tradeMelding = null;
+    let uitkomst = 'GEEN VOORSTEL', voor = null, trade = null, tradeMelding = null, uitleg = null;
     if (!voorstel) {
       await db.insertMessages([msg('uitslag', { trader_id: 'voorzitter', text: 'Geen geldig koop- of verkoopvoorstel. Het parlement doet deze ronde niets.' })]);
     } else {
@@ -248,7 +251,7 @@ export async function ronde({ db = maakDb(), bronnen = verzamelBronnen, llm = ll
           uitkomst = 'UITGEVOERD'; trade = r;
           await db.insertTrade({ round_id: round.id, t: nu.toISOString(), actie: r.actie, asset: r.asset, bedrag: r.bedrag, prijs: r.prijs, qty: r.qty, fee: r.fee, votes_for: voor });
           await db.insertMessages([msg('uitslag', { trader_id: 'voorzitter', text: `Aangenomen met ${voor} van ${actief.length}. ${r.actie} €${r.bedrag} ${r.asset} uitgevoerd${bp.bron === 'stemmers' && voorstel.actie === 'KOOP' ? ` (bedrag: het middelste van de voorstemmers, die zaten tussen €${bp.spreiding[0]} en €${bp.spreiding[1]})` : ''}${r.opgehoogd ? `, opgehoogd naar het minimum vanwege de vaste kosten` : ''}.`, action: { uitkomst, voor, bedrag: r.bedrag, voorgesteld: voorstel.bedrag } })]);
-          tradeMelding = { titel: `${r.actie === 'KOOP' ? 'Gekocht' : 'Verkocht'}: €${r.bedrag} ${r.asset}`, tekst: `Aangenomen met ${voor} van ${actief.length} stemmen${spoed ? ' (spoedzitting)' : ''}.`, prio: 4, tags: [r.actie === 'KOOP' ? 'green_circle' : 'red_circle'] };
+          tradeMelding = { titel: `${r.actie === 'KOOP' ? 'Gekocht' : 'Verkocht'}: ${r.asset} voor €${Math.round(r.bedrag)}`, tekst: `${voor} van de ${actief.length} traders stemden voor.`, prio: 4 };
         } else {
           uitkomst = 'HUISREGEL';
           await db.insertMessages([msg('uitslag', { trader_id: 'voorzitter', text: `Aangenomen met ${voor} stemmen, maar geblokkeerd: ${r.reden}.`, action: { uitkomst, voor } })]);
@@ -258,14 +261,13 @@ export async function ronde({ db = maakDb(), bronnen = verzamelBronnen, llm = ll
         await db.insertMessages([msg('uitslag', { trader_id: 'voorzitter', text: `Afgewezen: ${voor} van ${actief.length} voor, ${nodig} nodig${voorstel.uitPot ? ' (geld uit de dividendpot)' : ''}.`, action: { uitkomst, voor } })]);
       }
       // 9b. Uitleg in gewone taal: waarom, en wat verwachten we (komt in de app en in de melding)
-      let uitleg = null;
       if (stemmen?.length) {
         uitleg = await maakUitleg(llm, { voorstel: trade ? { ...voorstel, bedrag: trade.bedrag } : voorstel, uitkomst, voor, nodig: voorstel.uitPot ? CONFIG.potStemmen : CONFIG.stemmenNodig, totaal: actief.length, stemmen, naamVan,
           koers: marktRows.find(k => k.symbol === voorstel.asset), aanleiding, vraag: vraagA?.tekst?.replace(/^vraag van de eigenaar: /, '') });
         if (uitleg) {
           await db.insertMessages([msg('uitleg', { trader_id: 'voorzitter', text: uitleg.waarom, action: uitleg })]);
           await db.updateRound(round.id, { proposal: { ...voorstel, uitleg_kort: uitleg } });
-          if (tradeMelding) tradeMelding = { ...tradeMelding, tekst: `${uitleg.waarom} Verwachting: ${uitleg.verwachting}`.slice(0, 240) };
+          if (tradeMelding && uitleg.melding) tradeMelding = { ...tradeMelding, tekst: uitleg.melding };
         }
       }
       if (tradeMelding) await push(tradeMelding);
@@ -286,13 +288,13 @@ export async function ronde({ db = maakDb(), bronnen = verzamelBronnen, llm = ll
     await db.updateRound(round.id, { status: 'klaar', phase: 'klaar', outcome: uitkomst, votes_for: voor, trade, finished_at: new Date().toISOString() });
     log(`ronde ${no} klaar: ${uitkomst}${voor != null ? ` (${voor} voor)` : ''} · waarde €${v.toFixed(2)} · vasthouden €${b.toFixed(2)} · AI-calls ${llm.verbruik.calls}, tokens in ${llm.verbruik.input} uit ${llm.verbruik.output}`);
     await vg.stop();
-    return { no, uitkomst, voor, waarde: v, bench: b, trade };
+    return { no, uitkomst, voor, waarde: v, bench: b, trade, uitleg };
   } catch (e) {
     await vg.stop();
     await db.updateRound(round.id, { status: 'fout', phase: 'fout', error: String(e.message).slice(0, 500), finished_at: new Date().toISOString() });
     await boekKosten().catch(() => {});
     bewaarIn(staat); await db.saveState(staat);
-    await push({ titel: `Ronde ${no} mislukt`, tekst: String(e.message).slice(0, 200), prio: 5, tags: ['x'] });
+    await push({ titel: 'Zitting mislukt', tekst: 'Er ging iets mis. Bij de volgende check probeert Hamerslag het opnieuw.', prio: 5 });
     throw e;
   }
 }

@@ -29,6 +29,7 @@ Belangrijk:
 Geef ALLEEN JSON, zonder aanhalingstekens binnen je teksten:
 {"waarom": "1 tot 2 zinnen: waarom ${uitkomst === 'UITGEVOERD' ? (voorstel.actie === 'KOOP' ? 'we dit gekocht hebben' : 'we dit verkocht hebben') : 'het voorstel is afgewezen'}, met het belangrijkste argument",
  "verwachting": "1 tot 2 zinnen: wat we verwachten dat er de komende dagen of weken met deze koers gebeurt, en waarom. Wees eerlijk over onzekerheid",
+ "melding": "1 korte zin van hoogstens 15 woorden voor een pushmelding: de kern van waarom, simpel",
  "plan": "1 zin: ${uitkomst === 'UITGEVOERD' && voorstel.actie === 'KOOP' ? 'wanneer we verkopen (met de huisregels) of opnieuw kijken' : 'wanneer of onder welke voorwaarde we er opnieuw naar kijken'}"}`;
 }
 
@@ -37,6 +38,15 @@ export async function maakUitleg(llm, info) {
     const j = await llm.vraagJson(uitlegPrompt(info), { maxTokens: 600, model: CONFIG.model });
     const schoon = t => String(t || '').trim().slice(0, 400);
     if (!j?.waarom) return null;
-    return { waarom: schoon(j.waarom), verwachting: schoon(j.verwachting), plan: schoon(j.plan) };
+    return { waarom: schoon(j.waarom), verwachting: schoon(j.verwachting), plan: schoon(j.plan), melding: schoon(j.melding).slice(0, 160) || null };
+  } catch { return null; }
+}
+
+// Een (vaak Engelse) nieuwskop omzetten naar één simpele Nederlandse zin, voor de melding bij een spoedzitting
+export async function simpelNieuws(llm, titel) {
+  try {
+    const j = await llm.vraagJson(`Zet deze nieuwskop om naar één korte, simpele Nederlandse zin (hoogstens 15 woorden) voor iemand zonder beleggingskennis. Leg vaktermen kort uit of laat ze weg. Verzin niets.\n\nKop: ${titel}\n\nGeef ALLEEN JSON: {"zin": "..."}`, { maxTokens: 200, model: CONFIG.model });
+    const z = String(j?.zin || '').trim();
+    return z ? z.slice(0, 160) : null;
   } catch { return null; }
 }
