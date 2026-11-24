@@ -55,5 +55,5 @@ export async function nieuwscheck({ db = maakDb(), nieuws = () => fetchNews({ ma
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const { zittingscheck } = await import('./zittingscheck.js');
-  nieuwscheck({ inhalen: o => zittingscheck({ ...o, forceer: false }) }).catch(e => { console.error('Nieuwscheck mislukt:', e.message); process.exit(1); });
+  nieuwscheck({ inhalen: o => zittingscheck({ ...o, forceer: false, inhaal: true }) }).catch(e => { console.error('Nieuwscheck mislukt:', e.message); process.exit(1); });
 }

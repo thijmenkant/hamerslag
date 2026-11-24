@@ -255,7 +255,7 @@ function tegelsKaart(r, vz) {
     <div class="tegel"><span class="eyebrow">Vandaag</span><b>${zitV} zitting${zitV === 1 ? '' : 'en'}</b><span class="mut" style="font-size:11.5px">${chkV} voorzitting${chkV === 1 ? '' : 'en'}</span></div>
   </div>`;
 }
-function zittingKaart(r, msgs) {
+function zittingInhoud(r, msgs, { kort = false } = {}) {
   if (!r) return '';
   const p = r.proposal, ok = r.outcome === 'UITGEVOERD', n = actieveTraders().length || 10, voor = Number(r.votes_for ?? 0);
   const st = stemmenVan(msgs), naam = id => traderMap[id]?.name || id;
@@ -263,15 +263,14 @@ function zittingKaart(r, msgs) {
   const [bg, fg] = p ? kleurVan(p.asset) : ['#F1F3F8', '#5B6478'];
   const vraag = (r.aanleiding || []).find(a => a.soort === 'vraag');
   const waarom = vraag ? vraag.tekst.replace(/^vraag van de eigenaar: /, 'Jouw vraag: ') : r.spoed ? `Spoednieuws: ${r.spoed.titel}` : (r.aanleiding || []).filter(a => a.soort !== 'agenda').map(a => a.tekst).join(' · ');
-  return `<div class="card"><div class="card-h"><h2>Laatste zitting</h2><span class="mono mut" style="font-size:12px">${r.spoed ? 'spoed' : 'zitting ' + esc(r.no)} · ${wanneer(r.started_at)}</span></div>
-    <div class="card-b vakken" style="padding-top:6px">
+  return `<div class="vakken">
       ${waarom ? `<div class="vak vak-waarom"><span class="eyebrow">Waarom</span><p>${esc(waarom)}</p></div>` : ''}
-      <div class="vak vak-tafel">${p ? `<div class="ico" style="background:${bg};color:${fg}">${esc(p.asset)}</div>` : ''}<div style="flex:1;min-width:0"><span class="eyebrow">Op tafel</span><div class="zk-wat">${p ? `${p.actie === 'KOOP' ? 'Kopen' : 'Verkopen'} <b>${eur(r.trade?.bedrag ?? p.bedrag, 0)} ${esc(p.asset)}</b>` : 'Geen voorstel'}</div>${!p && r.outcome === 'GEEN VOORSTEL' ? '<div class="mut" style="font-size:12.5px;margin-top:2px">De traders vonden geen trade die nu kon of verstandig was.</div>' : ''}</div>${uitkomstTag(r)}</div>
+      <div class="vak vak-tafel">${p ? `<div class="ico" style="background:${bg};color:${fg}">${esc(p.asset)}</div>` : ''}<div style="flex:1;min-width:0"><span class="eyebrow">Op tafel</span><div class="zk-wat">${p ? `${p.actie === 'KOOP' ? 'Kopen' : 'Verkopen'} <b>${eur(r.trade?.bedrag ?? p.bedrag, 0)} ${esc(p.asset)}</b>` : 'Geen voorstel'}</div>${!p && r.outcome === 'GEEN VOORSTEL' ? '<div class="mut" style="font-size:12.5px;margin-top:2px">De traders vonden geen trade die nu kon of verstandig was.</div>' : ''}</div>${kort ? '' : uitkomstTag(r)}</div>
       ${r.votes_for != null ? `<div class="vak"><div class="zk-stand"><span class="up">${voor} voor</span><span class="mut">${NODIG_STEMMEN} nodig</span><span class="dn">${n - voor} tegen</span></div><div class="votebar dun"><i class="v" style="width:${voor / n * 100}%"></i><i class="t" style="width:${(n - voor) / n * 100}%"></i></div></div>` : ''}
       ${sv ? `<div class="vak arg v"><span class="eyebrow">Sterkste voor</span><p><b>${esc(naam(sv.id))}</b> ${esc(sv.reden)}</p></div>` : ''}
       ${stg ? `<div class="vak arg t"><span class="eyebrow">Sterkste tegen</span><p><b>${esc(naam(stg.id))}</b> ${esc(stg.reden)}</p></div>` : ''}
       ${r.id && r.status !== 'fout' ? `<button type="button" class="btn licht" data-logdebat="${r.id}">Bekijk het hele debat →</button>` : ''}
-    </div></div>`;
+    </div>`;
 }
 function voorzittingenKaart() {
   if (logboekOpen) return `${logboekKaart()}<button type="button" class="btn licht" data-logboek="dicht" style="margin-top:-4px">Logboek inklappen</button>`;
@@ -284,6 +283,64 @@ function voorzittingenKaart() {
     }).join('') || '<p class="mut" style="font-size:13px">Na de eerste uurcheck zie je hier wat de voorzitter elk uur besloot.</p>'}
     <button type="button" class="btn licht" data-logboek="open">Hele logboek: alle zittingen en checks →</button></div></div>`;
 }
+
+// ---------- UUR VOOR UUR: elke uurcheck, voorzitting en zitting op een tijdlijn ----------
+let tlDag = 0; const tlOpen = new Set();
+const twee = n => String(n).padStart(2, '0');
+// Kleuren: groen = gekocht/verkocht, rood = afgewezen, oranje = zitting gestart, geel = voorzitting zonder zitting, grijs = rustig/niets
+const tlKleurZit = r => r.status === 'bezig' ? 'live' : r.outcome === 'UITGEVOERD' ? 'groen' : r.outcome === 'AFGEWEZEN' ? 'rood' : 'grijs';
+const tlKleurVz = v => ({ ZITTING: 'oranje', GEEN_ZITTING: 'geel', RUSTIG: 'licht', OVERGESLAGEN: 'grijs' }[v.besluit] || 'licht');
+const KLEURRANG = ['live', 'groen', 'rood', 'oranje', 'geel', 'grijs', 'licht'];
+function tlVoorzitting(v) {
+  const k = (v.kansen || [])[0], open = tlOpen.has('v' + (v.id ?? v.t));
+  const B = { ZITTING: ['VOOR', 'Voorzitting · zitting'], GEEN_ZITTING: ['GEEL', 'Voorzitting · geen zitting'], RUSTIG: ['NIKS', 'Uurcheck · rustig'], OVERGESLAGEN: ['NIKS', 'Uurcheck overgeslagen'] }[v.besluit] || ['NIKS', v.besluit];
+  const ond = v.besluit === 'RUSTIG' ? 'Niets bewogen, geen nieuw nieuws' : v.besluit === 'OVERGESLAGEN' ? (v.reden || '') : (v.aanleiding?.[0]?.tekst || '').replace(/^nieuws: /, '');
+  const meer = v.besluit !== 'RUSTIG' && v.besluit !== 'OVERGESLAGEN';
+  return `<${meer ? 'button type="button"' : 'div'} class="tl-it tl-vz k-${tlKleurVz(v)}" ${meer ? `data-tlopen="v${v.id ?? v.t}"` : ''}>
+    <div class="tl-rij"><span class="mono tl-t">${tijd(v.t)}</span><span class="tag ${B[0]}">${B[1]}</span>${k ? `<span class="score-mini ${k.score >= 6 ? 'hoog' : ''}">${esc(k.asset)} ${k.score}/10</span>` : ''}${meer ? `<span class="tl-pijl">${open ? '▴' : '▾'}</span>` : ''}</div>
+    ${ond ? `<div class="tl-ond">${esc(ond)}</div>` : ''}
+    ${open ? `${(v.aanleiding || []).slice(1, 4).map(a => `<div class="tl-ond">${esc(a.tekst.replace(/^nieuws: /, ''))}</div>`).join('')}
+      ${(v.kansen || []).length ? `<div class="tl-kansen">${v.kansen.map(x => `<span class="score-mini ${x.score >= 6 ? 'hoog' : ''}">${esc(x.asset)} ${esc(x.richting?.toLowerCase() || '')} ${x.score}/10</span>`).join('')}<span class="mut">nodig: 6</span></div>` : ''}
+      ${v.reden ? `<div class="tl-reden"><b>Eva:</b> ${esc(v.reden)}</div>` : ''}` : ''}
+  </${meer ? 'button' : 'div'}>`;
+}
+function tlZitting(r, nieuwste) {
+  const p = r.proposal, n = actieveTraders().length || 10, voor = Number(r.votes_for ?? 0), open = nieuwste || tlOpen.has('z' + r.id);
+  const msgs = r === D.round || (r.id && r.id === D.round?.id) ? D.messages : [];
+  const vraag = (r.aanleiding || []).some(a => a.soort === 'vraag');
+  return `<div class="tl-it tl-zit k-${tlKleurZit(r)} ${open ? 'open' : ''}">
+    <button type="button" class="tl-rij tl-kop" ${nieuwste ? '' : `data-tlopen="z${r.id}"`}><span class="mono tl-t">${tijd(r.started_at)}</span><span class="tag ZIT">${r.spoed ? 'SPOEDZITTING' : 'ZITTING ' + esc(r.no)}</span>${vraag ? '<span class="tag JIJ">JOUW VRAAG</span>' : ''}${uitkomstTag(r)}${nieuwste ? '' : `<span class="tl-pijl">${open ? '▴' : '▾'}</span>`}</button>
+    ${open ? zittingInhoud(r, msgs, { kort: true }) : `<div class="tl-ond"><b>${p ? `${p.actie === 'KOOP' ? 'Kopen' : 'Verkopen'} ${eur(p.bedrag, 0)} ${esc(p.asset)}` : r.status === 'fout' ? 'Technische fout, telde niet mee' : 'Geen voorstel'}</b>${r.votes_for != null ? ` · ${voor} voor, ${n - voor} tegen` : ''}</div>`}
+  </div>`;
+}
+function tijdlijnKaart() {
+  const begin = new Date(); begin.setHours(0, 0, 0, 0); begin.setDate(begin.getDate() - tlDag);
+  const eind = new Date(begin); eind.setDate(eind.getDate() + 1);
+  const binnen = t => { const d = new Date(t); return d >= begin && d < eind; };
+  const rondes = (D.rondes || []).filter(r => binnen(r.started_at) && (r.status !== 'bezig' || Date.now() - new Date(r.started_at) < 30 * 60000));
+  const vzs = (D.voorzittingen || []).filter(v => binnen(v.t));
+  const items = [...vzs.map(v => ({ t: v.t, v, html: () => tlVoorzitting(v) })), ...rondes.map(r => ({ t: r.started_at, r }))];
+  const nieuwsteZit = tlDag === 0 ? rondes.filter(r => r.status !== 'bezig')[0] : null;
+  const perUur = new Map();
+  for (const it of items) { const u = new Date(it.t).getHours(); if (!perUur.has(u)) perUur.set(u, []); perUur.get(u).push(it); }
+  const uren = [...perUur.keys()];
+  const hoogste = tlDag === 0 ? new Date().getHours() : Math.max(...uren, 0), laagste = uren.length ? Math.min(...uren) : hoogste;
+  let html = '';
+  for (let u = hoogste; u >= laagste; u--) {
+    const lijst = (perUur.get(u) || []).sort((a, b) => new Date(b.t) - new Date(a.t));
+    const nu = tlDag === 0 && u === new Date().getHours();
+    const kleur = lijst.map(it => it.r ? tlKleurZit(it.r) : tlKleurVz(it.v)).sort((a, b) => KLEURRANG.indexOf(a) - KLEURRANG.indexOf(b))[0] || 'leeg';
+    html += `<div class="tl-uur ${lijst.length ? '' : 'leeg'} u-${kleur}"><div class="tl-label"><b>${twee(u)}:00</b>${nu ? '<span>nu</span>' : ''}</div><div class="tl-items">${lijst.map(it => it.r ? tlZitting(it.r, it.r === nieuwsteZit) : it.html()).join('') || `<div class="tl-geen">${nu ? 'Check volgt om ' + twee(volgendeRonde().getHours()) + ':00' : 'Geen check gedraaid'}</div>`}</div></div>`;
+  }
+  const z = rondes.filter(r => r.status === 'klaar').length, c = vzs.filter(v => v.besluit !== 'OVERGESLAGEN').length;
+  return `<div class="card tijdlijn"><div class="card-h"><h2>Uur voor uur</h2><div class="lg-filter">
+      <button type="button" data-tldag="1" class="${tlDag === 1 ? 'on' : ''}">Gisteren</button><button type="button" data-tldag="0" class="${tlDag === 0 ? 'on' : ''}">Vandaag</button></div></div>
+    <div class="tl-legenda"><span class="lg groen">Gekocht/verkocht</span><span class="lg rood">Afgewezen</span><span class="lg oranje">Zitting gestart</span><span class="lg geel">Geen zitting</span><span class="lg licht">Rustig</span></div>
+    <div class="tl-som mut">${c} uurcheck${c === 1 ? '' : 's'} · ${z} zitting${z === 1 ? '' : 'en'} ${tlDag === 0 ? 'vandaag' : 'gisteren'}</div>
+    <div class="tl-lijst">${html || '<p class="mut" style="padding:8px 0">Nog niets gebeurd op deze dag.</p>'}</div></div>`;
+}
+const tekenTijdlijn = () => { const el = $('#tijdlijn'); if (el) el.innerHTML = tijdlijnKaart(); };
+
 function renderHome() {
   const g = gezondheid();
   const r = D.besluit || (D.round?.status === 'klaar' ? D.round : null) || D.round;
@@ -295,11 +352,10 @@ function renderHome() {
   <div id="liveKaart"></div>
   <div class="home-grid"><div class="home-kol">
   ${pfKaart()}
-  ${tegelsKaart(r, vz)}
+  <div class="alleen-pc">${tegelsKaart(r, vz)}</div>
   <div id="vraagVak">${vraagKaart()}</div>
   </div><div class="home-kol">
-  ${zittingKaart(r, msgs)}
-  <div id="logboek">${voorzittingenKaart()}</div>
+  <div id="tijdlijn">${tijdlijnKaart()}</div>
   </div></div>
   <div class="card"><div class="card-h"><h2>De zaal <span class="pill" id="livePill" style="padding:3px 8px;font-size:10px"><span class="dot red"></span>LIVE</span></h2><span class="mut" id="miniFase" style="font-size:12px"></span></div>
     <div id="aanleidingBalk"></div>
@@ -728,6 +784,10 @@ document.addEventListener('click', e => {
   if (mo) { marktOpen = marktOpen === mo.dataset.mopen ? null : mo.dataset.mopen; tekenMarktLijst(); return; }
   const so = e.target.closest('[data-statusopen]');
   if (so && !e.target.closest('a.kijk')) { statusOpen = !statusOpen; toonLive(speler.s); return; }
+  const to = e.target.closest('[data-tlopen]');
+  if (to) { const k = to.dataset.tlopen; tlOpen.has(k) ? tlOpen.delete(k) : tlOpen.add(k); tekenTijdlijn(); return; }
+  const td = e.target.closest('[data-tldag]');
+  if (td) { tlDag = Number(td.dataset.tldag); tekenTijdlijn(); return; }
   const vv = e.target.closest('[data-vraagvoorbeeld]');
   if (vv) { const i = $('#vraagIn'); if (i) { i.value = vv.dataset.vraagvoorbeeld; i.focus(); } return; }
   const lb = e.target.closest('[data-logboek]');

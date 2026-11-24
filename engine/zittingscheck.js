@@ -139,7 +139,7 @@ const extraVoorBezit = async (syms, nu) => verwerkNieuws([
   ...(await meet('finnhub_bedrijf', () => fetchBedrijfsnieuws(syms, { nu, maxPerAandeel: 2 }), r => `${r.length} berichten`).catch(() => [])),
   ...(env('SEC_CONTACT') ? await meet('sec', () => fetchSecMeldingen(syms, { nu, uren: 3 }), r => `${r.length} meldingen`).catch(() => []) : []),
 ], { maxUren: 3, max: 20 });
-export async function zittingscheck({ db = maakDb(), koersen = alleKoersen, nieuws = () => fetchNews({ maxUren: 3, max: 60 }), extraNieuws = extraVoorBezit, cijfers = nu => fetchCijferkalender({ nu, dagen: 0 }), start = ronde, llm = llmEcht, nu = new Date(), forceer = env('FORCEER') === '1' } = {}) {
+export async function zittingscheck({ db = maakDb(), koersen = alleKoersen, nieuws = () => fetchNews({ maxUren: 3, max: 60 }), extraNieuws = extraVoorBezit, cijfers = nu => fetchCijferkalender({ nu, dagen: 0 }), start = ronde, llm = llmEcht, nu = new Date(), forceer = env('FORCEER') === '1', inhaal = false } = {}) {
   const staat = (await db.loadState()) || {};
   const rondes = await db.laatsteRondes();
   const laatste = rondes[0];
@@ -156,10 +156,12 @@ export async function zittingscheck({ db = maakDb(), koersen = alleKoersen, nieu
   // De externe wekker (hele uur) en GitHub zelf (7 over) starten allebei een check: de tweede slaat over.
   const minCheck = staat.laatsteCheck?.t ? (nu - new Date(staat.laatsteCheck.t)) / 60000 : Infinity;
   if (minCheck >= 0 && minCheck < 20) { log(`uurcheck: ${Math.round(minCheck)} min geleden al gedaan, overgeslagen`); return { gestart: false, reden: 'net gecheckt' }; }
-  if (staat.kosten?.gestopt) { log('uurcheck: budget op, geen zitting'); return { gestart: false, reden: 'budget' }; }
-  if (rondes.some(r => r.status === 'bezig' && (nu - new Date(r.started_at)) / 60000 < ZITTING.bezigMaxMin)) { log('uurcheck: er loopt al een zitting'); return { gestart: false, reden: 'zitting bezig' }; }
+  // Overgeslagen uurchecks komen ook in de tijdlijn van de app (alleen de gewone uurcheck, niet elke inhaalpoging)
+  const overgeslagen = async (reden, tekst) => { if (!inhaal) await db.insertVoorzitting?.({ t: nu.toISOString(), aanleiding: [], kansen: [], besluit: 'OVERGESLAGEN', reden: tekst }).catch(() => {}); return { gestart: false, reden }; };
+  if (staat.kosten?.gestopt) { log('uurcheck: budget op, geen zitting'); return overgeslagen('budget', 'Het maandbudget voor AI is op.'); }
+  if (rondes.some(r => r.status === 'bezig' && (nu - new Date(r.started_at)) / 60000 < ZITTING.bezigMaxMin)) { log('uurcheck: er loopt al een zitting'); return overgeslagen('zitting bezig', 'Er liep al een zitting; de check wordt ingehaald zodra die klaar is.'); }
   const minSinds = laatste ? (nu - new Date(laatste.started_at)) / 60000 : Infinity;
-  if (minSinds < ZITTING.rustMin) { log(`uurcheck: vorige zitting ${Math.round(minSinds)} min geleden`); return { gestart: false, reden: 'net een zitting' }; }
+  if (minSinds < ZITTING.rustMin) { log(`uurcheck: vorige zitting ${Math.round(minSinds)} min geleden`); return overgeslagen('net een zitting', `Er was net een zitting (${Math.round(minSinds)} min geleden); de check wordt binnen een kwartier ingehaald.`); }
 
   // De app laat zien wat de motor nu doet (statusbalk): eerst 'uurcheck bezig' met de bronnen, daarna 'voorzitting over ...'
   const vg = maakVoortgang(db, { fase: 'check' }, { stappen: ['crypto', 'aandelen', 'nieuws', 'bedrijf', 'cijfers'] });
