@@ -35,4 +35,9 @@ assert.equal(w.reden, 'beurs dicht'); assert.equal(db2.data.verzoeken[0].status,
 // crypto kan altijd
 db2.data.verzoeken[0].vraag = 'Is dit een goed moment voor Bitcoin?';
 assert.equal((await verwerkVraag({ db: db2, start, nu: new Date('2026-11-24T09:00:00Z') })).gestart, true);
+// een wachtende goud-vraag houdt een bitcoin-vraag niet tegen
+const db3 = geheugenDb(); db3.data.verzoeken.push({ id: 1, vraag: 'Moeten we in Nvidia investeren?', status: 'wacht' }, { id: 2, vraag: 'Moeten we in bitcoin investeren?', status: 'wacht' });
+gestart = [];
+assert.equal((await verwerkVraag({ db: db3, start, nu: new Date('2026-11-24T09:00:00Z') })).gestart, true);
+assert.equal(db3.data.verzoeken[1].status, 'klaar'); assert.equal(db3.data.verzoeken[0].status, 'wacht');
 console.log('✅ Vragen aan de zaal werken: opgepakt binnen de nieuwsreflex, juiste focus (goud = GLD), wacht bij een lopende zitting, max', MAX_VRAGEN_PER_DAG, 'per dag.');

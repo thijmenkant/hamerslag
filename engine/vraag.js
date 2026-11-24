@@ -27,7 +27,16 @@ export async function verwerkVraag({ db, start = ronde, nu = new Date() } = {}) 
   if (!db.wachtendeVragen) return { gestart: false };
   const wacht = await db.wachtendeVragen();
   if (!wacht.length) return { gestart: false };
-  const v = wacht[0];
+  // De eerste vraag die nu kan: vragen over aandelen/ETF's wachten bij een dichte beurs, maar houden crypto-vragen niet tegen
+  const kanNu = assets => !(assets.length && assets.every(a => vindAsset(a)?.soort !== 'crypto') && !beursOpen(nu));
+  let v = null, assets = [];
+  for (const w of wacht) {
+    const a = assetsUitVraag(w.vraag);
+    if (kanNu(a)) { v = w; assets = a; break; }
+    if (!w.reden) await db.updateVraag(w.id, { reden: 'wacht tot de Amerikaanse beurs opent (15:30)', assets: a });
+    log(`vraag: "${w.vraag}" gaat over ${a.join(', ')}, beurs dicht: wacht tot de opening`);
+  }
+  if (!v) return { gestart: false, reden: 'beurs dicht' };
   const rondes = await db.laatsteRondes();
   if (rondes.some(r => r.status === 'bezig' && (nu - new Date(r.started_at)) / 60000 < ZITTING.bezigMaxMin)) {
     log('vraag: er loopt al een zitting, de vraag wacht op de volgende beurt'); return { gestart: false, reden: 'zitting bezig' };
@@ -36,14 +45,6 @@ export async function verwerkVraag({ db, start = ronde, nu = new Date() } = {}) 
   if (vandaag >= MAX_VRAGEN_PER_DAG) {
     await db.updateVraag(v.id, { status: 'geweigerd', reden: `Maximum van ${MAX_VRAGEN_PER_DAG} eigen zittingen per 24 uur bereikt`, behandeld_at: nu.toISOString() });
     log('vraag: dagmaximum bereikt, geweigerd'); return { gestart: false, reden: 'dagmaximum' };
-  }
-  const assets = assetsUitVraag(v.vraag);
-  // Gaat de vraag alleen over aandelen/ETF's (bijv. goud = GLD) en is de Amerikaanse beurs dicht?
-  // Dan kan er niets gekocht of verkocht worden: de vraag wacht tot de beurs opent (15:30 Nederlandse tijd).
-  if (assets.length && assets.every(a => vindAsset(a)?.soort !== 'crypto') && !beursOpen(nu)) {
-    if (!v.reden) await db.updateVraag(v.id, { reden: 'wacht tot de Amerikaanse beurs opent (15:30)', assets });
-    log(`vraag: "${v.vraag}" gaat over ${assets.join(', ')}, beurs dicht: wacht tot de opening`);
-    return { gestart: false, reden: 'beurs dicht' };
   }
   await db.updateVraag(v.id, { status: 'gestart', behandeld_at: nu.toISOString(), assets });
   log(`VRAAG: "${v.vraag}"${assets.length ? ` (gaat over ${assets.join(', ')})` : ''}`);
