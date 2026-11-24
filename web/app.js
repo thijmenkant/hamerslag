@@ -289,15 +289,16 @@ let tlDag = 0; const tlOpen = new Set();
 const twee = n => String(n).padStart(2, '0');
 // Kleuren: groen = gekocht/verkocht, rood = afgewezen, oranje = zitting gestart, geel = voorzitting zonder zitting, grijs = rustig/niets
 const tlKleurZit = r => r.status === 'bezig' ? 'live' : r.outcome === 'UITGEVOERD' ? 'groen' : r.outcome === 'AFGEWEZEN' ? 'rood' : 'grijs';
+const tlUitkomst = r => r.status === 'bezig' ? 'nu live' : r.status === 'fout' ? 'mislukt' : r.outcome === 'UITGEVOERD' ? 'aangenomen' : r.outcome === 'AFGEWEZEN' ? 'afgewezen' : 'geen voorstel';
 const tlKleurVz = v => ({ ZITTING: 'oranje', GEEN_ZITTING: 'geel', RUSTIG: 'licht', OVERGESLAGEN: 'grijs' }[v.besluit] || 'licht');
 const KLEURRANG = ['live', 'groen', 'rood', 'oranje', 'geel', 'grijs', 'licht'];
 function tlVoorzitting(v) {
   const k = (v.kansen || [])[0], open = tlOpen.has('v' + (v.id ?? v.t));
-  const B = { ZITTING: ['VOOR', 'Voorzitting · zitting'], GEEN_ZITTING: ['GEEL', 'Voorzitting · geen zitting'], RUSTIG: ['NIKS', 'Uurcheck · rustig'], OVERGESLAGEN: ['NIKS', 'Uurcheck overgeslagen'] }[v.besluit] || ['NIKS', v.besluit];
+  const B = { ZITTING: ['VOOR', 'Voorzitting · zitting'], GEEN_ZITTING: ['GEEL', 'Voorzitting · geen zitting'], RUSTIG: ['NIKS', 'Uurcheck · rustig'], OVERGESLAGEN: ['NIKS', 'Uurcheck'] }[v.besluit] || ['NIKS', v.besluit];
   const ond = v.besluit === 'RUSTIG' ? 'Niets bewogen, geen nieuw nieuws' : v.besluit === 'OVERGESLAGEN' ? (v.reden || '') : (v.aanleiding?.[0]?.tekst || '').replace(/^nieuws: /, '');
   const meer = v.besluit !== 'RUSTIG' && v.besluit !== 'OVERGESLAGEN';
   return `<${meer ? 'button type="button"' : 'div'} class="tl-it tl-vz k-${tlKleurVz(v)}" ${meer ? `data-tlopen="v${v.id ?? v.t}"` : ''}>
-    <div class="tl-rij"><span class="mono tl-t">${tijd(v.t)}</span><span class="tag ${B[0]}">${B[1]}</span>${k ? `<span class="score-mini ${k.score >= 6 ? 'hoog' : ''}">${esc(k.asset)} ${k.score}/10</span>` : ''}${meer ? `<span class="tl-pijl">${open ? '▴' : '▾'}</span>` : ''}</div>
+    <div class="tl-rij"><span class="mono tl-t">${tijd(v.t)}</span><span class="tl-naam">${B[1].split(' · ')[0]}</span>${B[1].includes(' · ') || v.besluit === 'OVERGESLAGEN' ? `<span class="tl-uit">${v.besluit === 'OVERGESLAGEN' ? 'overgeslagen' : B[1].split(' · ')[1]}</span>` : ''}${k ? `<span class="score-mini ${k.score >= 6 ? 'hoog' : ''}">${esc(k.asset)} ${k.score}/10</span>` : ''}${meer ? `<span class="tl-pijl">${open ? '▴' : '▾'}</span>` : ''}</div>
     ${ond ? `<div class="tl-ond">${esc(ond)}</div>` : ''}
     ${open ? `${(v.aanleiding || []).slice(1, 4).map(a => `<div class="tl-ond">${esc(a.tekst.replace(/^nieuws: /, ''))}</div>`).join('')}
       ${(v.kansen || []).length ? `<div class="tl-kansen">${v.kansen.map(x => `<span class="score-mini ${x.score >= 6 ? 'hoog' : ''}">${esc(x.asset)} ${esc(x.richting?.toLowerCase() || '')} ${x.score}/10</span>`).join('')}<span class="mut">nodig: 6</span></div>` : ''}
@@ -309,7 +310,7 @@ function tlZitting(r, nieuwste) {
   const msgs = r === D.round || (r.id && r.id === D.round?.id) ? D.messages : [];
   const vraag = (r.aanleiding || []).some(a => a.soort === 'vraag');
   return `<div class="tl-it tl-zit k-${tlKleurZit(r)} ${open ? 'open' : ''}">
-    <button type="button" class="tl-rij tl-kop" ${nieuwste ? '' : `data-tlopen="z${r.id}"`}><span class="mono tl-t">${tijd(r.started_at)}</span><span class="tag ZIT">${r.spoed ? 'SPOEDZITTING' : 'ZITTING ' + esc(r.no)}</span>${vraag ? '<span class="tag JIJ">JOUW VRAAG</span>' : ''}${uitkomstTag(r)}${nieuwste ? '' : `<span class="tl-pijl">${open ? '▴' : '▾'}</span>`}</button>
+    <button type="button" class="tl-rij tl-kop" ${nieuwste ? '' : `data-tlopen="z${r.id}"`}><span class="mono tl-t">${tijd(r.started_at)}</span><span class="tl-naam">${r.spoed ? 'Spoedzitting' : 'Zitting ' + esc(r.no)}${vraag ? '<small> · jouw vraag</small>' : ''}</span><span class="tl-uit">${tlUitkomst(r)}</span>${nieuwste ? '' : `<span class="tl-pijl">${open ? '▴' : '▾'}</span>`}</button>
     ${open ? zittingInhoud(r, msgs, { kort: true }) : `<div class="tl-ond"><b>${p ? `${p.actie === 'KOOP' ? 'Kopen' : 'Verkopen'} ${eur(p.bedrag, 0)} ${esc(p.asset)}` : r.status === 'fout' ? 'Technische fout, telde niet mee' : 'Geen voorstel'}</b>${r.votes_for != null ? ` · ${voor} voor, ${n - voor} tegen` : ''}</div>`}
   </div>`;
 }
