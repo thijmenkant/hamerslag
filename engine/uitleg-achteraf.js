@@ -11,11 +11,12 @@ const markt = await db.loadMarket();
 let n = 0;
 for (const r of await db.rondesMetVoorstel()) {
   const p = r.proposal;
-  if (!p?.asset || p.uitleg_kort || r.votes_for == null) continue;
+  if (!p?.asset || (p.uitleg_kort && process.env.OPNIEUW !== '1') || r.votes_for == null) continue;
   const stemmen = (await db.berichtenVan(r.id, 'stem')).map(m => ({ id: m.trader_id, stem: m.action?.stem, reden: m.text }));
   if (!stemmen.length) continue;
   const vraag = (r.aanleiding || []).find(a => a.soort === 'vraag')?.tekst?.replace(/^vraag van de eigenaar: /, '');
-  const uitleg = await maakUitleg(llm, { voorstel: p, uitkomst: r.outcome, voor: r.votes_for, nodig: p.uitPot ? CONFIG.potStemmen : CONFIG.stemmenNodig, totaal: stemmen.length,
+  const { uitleg_kort, ...voorstel } = p;
+  const uitleg = await maakUitleg(llm, { voorstel, uitkomst: r.outcome, voor: r.votes_for, nodig: p.uitPot ? CONFIG.potStemmen : CONFIG.stemmenNodig, totaal: stemmen.length,
     stemmen, naamVan: id => traders[id] || id, koers: markt.find(m => m.symbol === p.asset), aanleiding: r.aanleiding, vraag });
   if (!uitleg) { console.log(`zitting ${r.no}: geen uitleg gelukt`); continue; }
   await db.updateRound(r.id, { proposal: { ...p, uitleg_kort: uitleg } });

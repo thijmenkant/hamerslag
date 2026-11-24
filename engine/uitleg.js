@@ -10,7 +10,8 @@ export function uitlegPrompt({ voorstel, uitkomst, voor, nodig, totaal, stemmen,
 
 ZITTING
 Aanleiding: ${vraag ? `de eigenaar vroeg: "${vraag}"` : (aanleiding || []).map(a => a.tekst).join('; ') || 'gewone uurcheck'}
-Voorstel: ${voorstel.actie} €${voorstel.bedrag} ${voorstel.asset}${voorstel.uitleg ? ` — onderbouwing van de indiener: ${voorstel.uitleg}` : ''}
+Wat is ${voorstel.asset}: ${koers?.name ? `${koers.name}${koers.kind ? ` (${koers.kind})` : ''}` : 'zie de naam hierboven'}
+Voorstel: ${voorstel.actie} €${voorstel.bedrag} ${voorstel.asset}, ingediend door trader ${voorstel.door ? naamVan(voorstel.door) : 'een van de traders'}${voorstel.uitleg ? ` — onderbouwing: ${voorstel.uitleg}` : ''}
 Koers nu: ${koers ? `${koers.price} (${koers.chg24h != null ? `${(koers.chg24h * 100).toFixed(1)}% in 24 uur` : 'verandering onbekend'})` : 'onbekend'}
 Uitslag: ${uitkomst} met ${voor} van ${totaal} stemmen voor (${nodig} nodig)
 Huisregels: we verkopen automatisch bij ${pct(CONFIG.stopLoss)} verlies (stop-loss) en pakken winst bij +${pct(CONFIG.winstDoel)}.
@@ -19,6 +20,11 @@ Redenen van de voorstemmers:
 ${redenen('VOOR')}
 Redenen van de tegenstemmers:
 ${redenen('TEGEN')}
+
+Belangrijk:
+- Het voorstel kwam van een trader, niet van de eigenaar. Zeg dus nooit "je voorstel"; zeg "het voorstel" of noem de trader.
+- Gebruik alleen feiten die hierboven staan. Verzin niets over wat een fonds of bedrijf is: gebruik de naam bij "Wat is". Weet je het niet zeker, laat het dan weg.
+- Koersen van aandelen en fondsen zijn in dollars.
 
 Geef ALLEEN JSON, zonder aanhalingstekens binnen je teksten:
 {"waarom": "1 tot 2 zinnen: waarom ${uitkomst === 'UITGEVOERD' ? (voorstel.actie === 'KOOP' ? 'we dit gekocht hebben' : 'we dit verkocht hebben') : 'het voorstel is afgewezen'}, met het belangrijkste argument",

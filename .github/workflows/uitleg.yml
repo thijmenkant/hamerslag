@@ -3,6 +3,11 @@ name: Hamerslag uitleg achteraf
 # Eenmalig: oude zittingen alsnog een uitleg in gewone taal geven (waarom + verwachting).
 on:
   workflow_dispatch:
+    inputs:
+      opnieuw:
+        description: 'Ook zittingen die al een uitleg hebben opnieuw doen'
+        type: boolean
+        default: false
 
 jobs:
   uitleg:
@@ -22,3 +27,4 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           MODEL_HAIKU: ${{ vars.MODEL_HAIKU }}
           CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
+          OPNIEUW: ${{ inputs.opnieuw && '1' || '' }}
