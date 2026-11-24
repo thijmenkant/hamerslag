@@ -9,10 +9,21 @@ import { verwerkVraag } from './vraag.js';
 
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 
-export async function nieuwscheck({ db = maakDb(), nieuws = () => fetchNews({ maxUren: 3, max: 60 }), start = ronde, nu = new Date() } = {}) {
+export async function nieuwscheck({ db = maakDb(), nieuws = () => fetchNews({ maxUren: 3, max: 60 }), start = ronde, nu = new Date(), inhalen = null } = {}) {
   // Eerst: heeft de eigenaar een vraag aan de zaal gesteld? Die gaat voor.
   try { const v = await verwerkVraag({ db, start, nu }); if (v.gestart) return v; }
   catch (e) { log('⚠ vraag mislukt:', e.message); }
+  // Inhalen: is de uurcheck van dit uur overgeslagen (bijv. omdat er net een zitting was), dan doen we hem alsnog.
+  // Niet in de eerste minuten van het uur, dan draait de gewone uurcheck van de wekker zelf nog.
+  if (inhalen && nu.getUTCMinutes() >= 4) {
+    const staat = await db.loadState().catch(() => null);
+    const lc = staat?.laatsteCheck?.t;
+    if (staat?.cash != null && (!lc || nu - new Date(lc) >= 55 * 60000)) {
+      log(`nieuwscheck: de uurcheck van dit uur is nog niet gedaan (laatste ${lc ? Math.round((nu - new Date(lc)) / 60000) + ' min geleden' : 'nooit'}), nu inhalen`);
+      const r = await inhalen({ db, start, nu });
+      if (r?.reden !== 'net een zitting') return { ...r, ingehaald: true };
+    }
+  }
   const lijst = await nieuws();
   const grens = nu.getTime() - SPOED.maxLeeftijdMin * 60000;
   let kandidaten = lijst.filter(n => n.belang >= SPOED.drempel && n.assets.length && new Date(n.tijd).getTime() >= grens);
@@ -43,5 +54,6 @@ export async function nieuwscheck({ db = maakDb(), nieuws = () => fetchNews({ ma
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  nieuwscheck().catch(e => { console.error('Nieuwscheck mislukt:', e.message); process.exit(1); });
+  const { zittingscheck } = await import('./zittingscheck.js');
+  nieuwscheck({ inhalen: o => zittingscheck({ ...o, forceer: false }) }).catch(e => { console.error('Nieuwscheck mislukt:', e.message); process.exit(1); });
 }

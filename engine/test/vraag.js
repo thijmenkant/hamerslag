@@ -40,4 +40,14 @@ const db3 = geheugenDb(); db3.data.verzoeken.push({ id: 1, vraag: 'Moeten we in 
 gestart = [];
 assert.equal((await verwerkVraag({ db: db3, start, nu: new Date('2026-11-24T09:00:00Z') })).gestart, true);
 assert.equal(db3.data.verzoeken[1].status, 'klaar'); assert.equal(db3.data.verzoeken[0].status, 'wacht');
+// inhalen: uurcheck overgeslagen -> de nieuwsreflex doet hem alsnog (na minuut 4), maar niet als hij net gedaan is
+const db4 = geheugenDb(); await db4.saveState({ cash: 1000, positions: {}, laatsteCheck: { t: '2026-11-24T09:00:00Z' } });
+let ingehaald = 0; const inhalen = async () => { ingehaald++; return { gestart: false, reden: 'rustig' }; };
+await nieuwscheck({ db: db4, start, nu: new Date('2026-11-24T10:02:00Z'), nieuws: async () => [], inhalen });
+assert.equal(ingehaald, 0, 'niet in de eerste minuten van het uur');
+await nieuwscheck({ db: db4, start, nu: new Date('2026-11-24T10:05:00Z'), nieuws: async () => [], inhalen });
+assert.equal(ingehaald, 1, 'wel na minuut 4 als de check van dit uur ontbreekt');
+await db4.saveState({ cash: 1000, positions: {}, laatsteCheck: { t: '2026-11-24T10:05:00Z' } });
+await nieuwscheck({ db: db4, start, nu: new Date('2026-11-24T10:10:00Z'), nieuws: async () => [], inhalen });
+assert.equal(ingehaald, 1, 'niet als hij net gedaan is');
 console.log('✅ Vragen aan de zaal werken: opgepakt binnen de nieuwsreflex, juiste focus (goud = GLD), wacht bij een lopende zitting, max', MAX_VRAGEN_PER_DAG, 'per dag.');
