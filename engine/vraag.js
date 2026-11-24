@@ -3,6 +3,7 @@
 
 import { ASSETS, KOPPELING, ZITTING, beursOpen, vindAsset } from './config.js';
 import { ronde } from './run.js';
+import { push } from './push.js';
 
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 export const MAX_VRAGEN_PER_DAG = 5;
@@ -53,6 +54,8 @@ export async function verwerkVraag({ db, start = ronde, nu = new Date() } = {}) 
   try {
     const uitslag = await start({ db, nu, aanleiding, agenda: agenda.length ? agenda : null });
     await db.updateVraag(v.id, { status: 'klaar', round_no: uitslag?.no ?? null, uitkomst: uitslag?.uitkomst ?? null });
+    const U = { UITGEVOERD: 'aangenomen', AFGEWEZEN: 'afgewezen', 'GEEN VOORSTEL': 'geen voorstel' }[uitslag?.uitkomst] || String(uitslag?.uitkomst || 'klaar').toLowerCase();
+    await push({ titel: `Jouw vraag: ${U}`, tekst: `"${v.vraag}"${uitslag?.voor != null ? ` · ${uitslag.voor} stemmen voor` : ''}. Tik om het debat terug te kijken.`, url: './#home', db });
     return { gestart: true, vraag: v, uitslag };
   } catch (e) {
     await db.updateVraag(v.id, { status: 'fout', reden: String(e.message).slice(0, 300) }).catch(() => {});

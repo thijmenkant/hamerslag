@@ -178,3 +178,21 @@ drop policy if exists "live lezen" on live;
 create policy "live lezen" on live for select to authenticated using (true);
 grant select on live to authenticated;
 grant all on live to service_role;
+
+-- Meldingen van de app zelf: elk apparaat dat ze aanzet (Web Push).
+create table if not exists push_abonnementen (
+  endpoint text primary key,
+  p256dh text not null,
+  auth text not null,
+  apparaat text,
+  t timestamptz default now()
+);
+alter table push_abonnementen enable row level security;
+drop policy if exists "meldingen aanmelden" on push_abonnementen;
+create policy "meldingen aanmelden" on push_abonnementen for insert to authenticated with check (true);
+drop policy if exists "meldingen afmelden" on push_abonnementen;
+create policy "meldingen afmelden" on push_abonnementen for delete to authenticated using (true);
+drop policy if exists "meldingen lezen" on push_abonnementen;
+create policy "meldingen lezen" on push_abonnementen for select to authenticated using (true);
+grant select, insert, delete on push_abonnementen to authenticated;
+grant all on push_abonnementen to service_role;

@@ -127,3 +127,16 @@ export async function laadNu() {
   laatsteVz = vz.data?.[0]?.id ?? null;
   return { live: li.data?.data || null, voorzittingen: vz.data || [], vragen: vr.data || [], nieuweCheck };
 }
+
+// Meldingen: dit apparaat aan- of afmelden
+export async function bewaarAbonnement(a) {
+  if (!isLive()) return;
+  const c = await client();
+  const { error } = await c.from('push_abonnementen').insert(a);
+  if (error && error.code !== '23505') throw error;   // 23505 = dit apparaat stond er al
+}
+export async function verwijderAbonnement(endpoint) {
+  if (!isLive()) return;
+  const c = await client();
+  await c.from('push_abonnementen').delete().eq('endpoint', endpoint);
+}

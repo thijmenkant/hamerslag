@@ -1,19 +1,22 @@
-// Pushmeldingen naar je telefoon via ntfy (gratis, geen account nodig).
-// Installeer de app "ntfy" en abonneer je op jouw geheime onderwerp (NTFY_TOPIC).
-import { env } from './config.js';
+// Pushmeldingen naar je telefoon, van de Hamerslag-app zelf (Web Push).
+// Je zet ze aan in de app (Bronnen → Meldingen); elk apparaat dat ze aanzette krijgt ze.
+import { stuur } from './webpush.js';
 
-export async function push({ titel, tekst, prio = 3, tags = [] }) {
-  const topic = env('NTFY_TOPIC');
-  if (!topic) return false;
-  // Het hamer-icoon naast de melding (Android). Staat de app ergens anders, zet dan PUSH_ICON.
-  let icon = env('PUSH_ICON');
-  if (!icon && env('APP_URL')) { try { const u = new URL(env('APP_URL')); if (!u.pathname.endsWith('/')) u.pathname = u.pathname.replace(/[^/]*$/, ''); icon = new URL('icon-192.png', u).href; } catch {} }
+let dbStandaard = null;
+export function pushDb(db) { dbStandaard = db; }
+
+export async function push({ titel, tekst, prio = 3, url = null, db = dbStandaard }) {
   try {
-    const r = await fetch(env('NTFY_SERVER', 'https://ntfy.sh'), {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ topic, title: titel, message: tekst, priority: prio, tags, click: env('APP_URL') || undefined, icon: icon || undefined }),
-      signal: AbortSignal.timeout(10000),
-    });
-    return r.ok;
+    if (!db?.pushAbonnementen) { const { maakDb } = await import('./db.js'); db = maakDb(); }
+    const abos = await db.pushAbonnementen();
+    if (!abos?.length) return false;
+    const bericht = { titel, tekst, url: url || './', tag: titel.split(':')[0], urgent: prio >= 4 };
+    let ok = 0;
+    for (const a of abos) {
+      const r = await stuur(a, bericht, { urgent: prio >= 4 });
+      if (r === 'ok') ok++;
+      if (r === 'weg') await db.verwijderAbonnement?.(a.endpoint).catch(() => {});   // telefoon heeft de meldingen uitgezet
+    }
+    return ok > 0;
   } catch { return false; } // een mislukte melding mag een ronde nooit laten mislukken
 }

@@ -60,7 +60,6 @@ Broker-sleutels (Bitvavo, Trading 212) maak je nu **niet** aan: met nepgeld zijn
 | **Supabase** | Gratis project, regio Frankfurt | supabase.com → New project |
 | **GitHub** | Een **publieke** repository (zie stap 3) | github.com → New repository |
 | **Vercel** | Gratis account, inloggen met GitHub | vercel.com |
-| **ntfy** | De gratis app op je telefoon, geen account | App Store / Play Store |
 
 Zet alle sleutels tijdelijk in een notitie. Na stap 4 kun je die notitie weggooien.
 
@@ -92,7 +91,6 @@ Tabblad **Secrets** → *New repository secret*:
 | `FINNHUB_KEY` | Finnhub-key |
 | `FMP_KEY` | Financial Modeling Prep-key |
 | `FRED_KEY` | FRED-key |
-| `NTFY_TOPIC` | een lange, geheime naam, bijv. `aiparlement-thijmen-8k2q7x` |
 
 Tabblad **Variables** → *New repository variable*:
 
@@ -104,7 +102,7 @@ Tabblad **Variables** → *New repository variable*:
 
 ### ☐ 5 · Meldingen op je telefoon (± 2 min)
 
-Open **ntfy** → **+** → abonneer je op precies dezelfde naam als je `NTFY_TOPIC`.
+Meldingen zet je aan in de app zelf: **Bronnen → Meldingen → Zet meldingen aan**. Op de iPhone eerst de app op je beginscherm zetten (Safari → Deel → Zet op beginscherm) en hem daar openen.
 
 ### ☐ 6 · Controle (± 2 min)
 

@@ -500,3 +500,10 @@ button.tl-it{cursor:pointer}button.tl-it:hover{border-color:var(--line2)}
 .tl-onder .score-mini{flex:none;margin-top:1px}
 .tl-vraag{font-size:12px;color:var(--mut);font-style:italic;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tl-naam{flex:none}
+
+.meld-balk{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:var(--card);border:1px dashed var(--line2)}
+.meld-balk .ic{font-size:18px}.meld-balk .tx{flex:1;min-width:0}.meld-balk .tx b{display:block;font-size:13.5px}.meld-balk .tx span{font-size:12px;color:var(--mut)}
+.meld-balk button{border:0;background:var(--iris);color:#fff;font:700 12.5px Inter,system-ui,sans-serif;border-radius:9px;padding:8px 11px;cursor:pointer}
+.meld-balk button.x{background:none;color:var(--mut2);padding:6px}
+#meldBalk:empty{display:none}
+.card-b button.btn{width:100%;padding:12px 16px;border:0;cursor:pointer;font-family:inherit;min-height:46px}

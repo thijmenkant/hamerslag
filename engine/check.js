@@ -33,7 +33,7 @@ export async function controle({ fetchFn = fetch, log = console.log } = {}) {
   for (const [n, verplicht, wat] of [
     ['ANTHROPIC_API_KEY', true, 'de AI'], ['SUPABASE_URL', true, 'de database'], ['SUPABASE_SERVICE_KEY', true, 'de database'],
     ['COINGECKO_KEY', true, 'cryptokoersen'], ['FINNHUB_KEY', true, 'aandelenkoersen en nieuws'],
-    ['FMP_KEY', false, 'exact dividend (zonder: schatting)'], ['NTFY_TOPIC', false, 'pushmeldingen'],
+    ['FMP_KEY', false, 'exact dividend (zonder: schatting)'], 
     ['FRED_KEY', false, 'rente, inflatie, werkloosheid en VIX'],
   ]) {
     if (env(n)) goed(`${n} is ingesteld (${wat})`);
@@ -160,12 +160,14 @@ export async function controle({ fetchFn = fetch, log = console.log } = {}) {
   }
 
   // 6. Pushmelding
-  if (env('NTFY_TOPIC')) {
-    try {
-      const r = await fetchFn(env('NTFY_SERVER', 'https://ntfy.sh'), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ topic: env('NTFY_TOPIC'), title: 'Hamerslag: test', message: 'Meldingen werken! Je krijgt voortaan een melding bij trades, stop-loss, spoedzittingen en fouten.', tags: ['white_check_mark'] }), signal: AbortSignal.timeout(10000) });
-      r.ok ? goed('Testmelding verstuurd: kijk op je telefoon in ntfy') : fout(`ntfy: fout ${r.status}`, 'controleer NTFY_TOPIC');
-    } catch (e) { fout('ntfy: geen verbinding', e.message); }
-  }
+  // Meldingen: stuur een testmelding naar elk apparaat dat ze in de app aanzette
+  try {
+    const { push } = await import('./push.js');
+    const { maakDb } = await import('./db.js');
+    const abos = await maakDb().pushAbonnementen();
+    if (!abos.length) let_op('Meldingen: nog geen apparaat aangemeld', 'zet ze aan in de app: Bronnen → Meldingen');
+    else (await push({ titel: 'Hamerslag: testmelding', tekst: 'De controle is gedaan. Zie je dit, dan werken de meldingen.' })) ? goed(`Testmelding verstuurd naar ${abos.length} apparaat/apparaten`) : fout('Testmelding mislukt', 'zet de meldingen in de app opnieuw aan');
+  } catch (e) { let_op('Meldingen: kon niet controleren', e.message); }
 
   log(`\nKlaar: ${uit.ok} goed, ${uit.waarschuwing} waarschuwing${uit.waarschuwing === 1 ? '' : 'en'}, ${uit.fout} fout${uit.fout === 1 ? '' : 'en'}.`);
   log(uit.fout ? 'Los eerst de ❌ op en draai de controle opnieuw.' : 'Alles in orde. Start de eerste zitting: Actions → "Hamerslag uurcheck" → Run workflow.');

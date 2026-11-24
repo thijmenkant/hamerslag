@@ -39,16 +39,14 @@ jobs:
           MODEL_HAIKU: ${{ vars.MODEL_HAIKU }}
           MODEL_SONNET: ${{ vars.MODEL_SONNET }}
           MODEL_OPUS: ${{ vars.MODEL_OPUS }}
-          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           APP_URL: ${{ vars.APP_URL }}
           SEC_CONTACT: ${{ vars.SEC_CONTACT }}
           FORCEER: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.zitting) != 'false' && '1' || '' }}
       - name: Melding als het misgaat
         if: failure()
+        working-directory: engine
         env:
-          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
-        run: |
-          if [ -n "$NTFY_TOPIC" ]; then
-            curl -s -H "Title: Hamerslag: workflow mislukt" -H "Priority: 5" -H "Tags: x" \
-              -d "De GitHub-workflow '${{ github.workflow }}' is mislukt. Kijk bij Actions in je repository." "https://ntfy.sh/$NTFY_TOPIC" || true
-          fi
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          APP_URL: ${{ vars.APP_URL }}
+        run: node meld.js "Hamerslag: workflow mislukt" "De GitHub-workflow '${{ github.workflow }}' is mislukt. Kijk bij Actions in je repository." || true

@@ -25,7 +25,6 @@ jobs:
           FINNHUB_KEY: ${{ secrets.FINNHUB_KEY }}
           FMP_KEY: ${{ secrets.FMP_KEY }}
           FRED_KEY: ${{ secrets.FRED_KEY }}
-          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           APP_URL: ${{ vars.APP_URL }}
           SEC_CONTACT: ${{ vars.SEC_CONTACT }}
           MODEL_HAIKU: ${{ vars.MODEL_HAIKU }}

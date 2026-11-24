@@ -1,5 +1,5 @@
 import { avatarUrl } from './avatar.js';
-import { laad, abonneer, isLive, session, login, bronnenVoorRonde, laadRonde, stelVraag, laadVragen, laadNu } from './data.js';
+import { laad, abonneer, isLive, session, login, bronnenVoorRonde, laadRonde, stelVraag, laadVragen, laadNu, bewaarAbonnement, verwijderAbonnement } from './data.js';
 import { Speler } from './player.js';
 
 // ---------- helpers ----------
@@ -218,6 +218,58 @@ function besluitKaart() {
 const STEMMING = { 'Extreme Fear': 'heel angstig', Fear: 'angstig', Neutral: 'neutraal', Greed: 'hebberig', 'Extreme Greed': 'heel hebberig' };
 const stemmingTekst = t => String(t || '').replace(/^.*Fear & Greed( Index)?:?\s*/i, 'Stemming op de markt: ').replace(/\((Extreme Fear|Extreme Greed|Fear|Neutral|Greed)\)/, (_, w) => `(${STEMMING[w]})`);
 
+
+// ---------- MELDINGEN van de app zelf (Web Push) ----------
+const isIos = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isBeginscherm = () => navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+let meldStand = null;   // 'aan' | 'uit' | 'geblokkeerd' | 'beginscherm' | 'kan-niet'
+async function meldingStatus() {
+  if (!('serviceWorker' in navigator)) return 'kan-niet';
+  if (isIos && !isBeginscherm()) return 'beginscherm';
+  if (!('PushManager' in window) || !('Notification' in window)) return isIos ? 'beginscherm' : 'kan-niet';
+  if (Notification.permission === 'denied') return 'geblokkeerd';
+  try { const reg = await navigator.serviceWorker.ready; return (await reg.pushManager.getSubscription()) ? 'aan' : 'uit'; } catch { return 'uit'; }
+}
+const sleutelBytes = b => { const s = atob((b + '='.repeat((4 - b.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(s, c => c.charCodeAt(0)); };
+async function meldingenAan() {
+  const key = D.state?.vapidPublic;
+  if (!key && !D.demo) throw new Error('De meldingen worden ingesteld bij de eerstvolgende uurcheck. Probeer het daarna opnieuw.');
+  const toestemming = await Notification.requestPermission();
+  if (toestemming !== 'granted') throw new Error(toestemming === 'denied' ? 'Je hebt meldingen geweigerd. Zet ze aan in de instellingen van je telefoon.' : 'Geen toestemming gegeven.');
+  const reg = await navigator.serviceWorker.ready;
+  if (D.demo) { await reg.showNotification('Hamerslag', { body: 'Voorbeeld: zo ziet een melding eruit.', icon: 'icon-192.png' }).catch(() => {}); return; }
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: sleutelBytes(key) });
+  const j = sub.toJSON();
+  await bewaarAbonnement({ endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, apparaat: navigator.userAgent.slice(0, 160) });
+  await reg.showNotification('Meldingen staan aan', { body: 'Je krijgt nu een melding bij elke trade, spoedzitting en als er iets misgaat.', icon: 'icon-192.png', tag: 'hamerslag-aan' }).catch(() => {});
+}
+async function meldingenUit() {
+  const reg = await navigator.serviceWorker.ready, sub = await reg.pushManager.getSubscription();
+  if (sub) { await verwijderAbonnement(sub.endpoint).catch(() => {}); await sub.unsubscribe(); }
+}
+function meldingenKaart(klein = false) {
+  const st = meldStand;
+  if (!st) return '';
+  if (klein && (st === 'aan' || st === 'kan-niet' || st === 'geblokkeerd' || leesOnthoud('hs-meld-weg'))) return '';
+  const UITLEG = {
+    aan: 'Meldingen staan aan op dit apparaat.',
+    uit: 'Krijg een melding bij elke trade, een spoedzitting, stop-loss of winst, en als er iets misgaat.',
+    geblokkeerd: 'Meldingen zijn geblokkeerd voor deze app. Zet ze aan bij de instellingen van je telefoon of browser.',
+    beginscherm: 'Op de iPhone werken meldingen alleen vanaf je beginscherm: tik in Safari op Deel → Zet op beginscherm, open Hamerslag daar en zet dan de meldingen aan.',
+    'kan-niet': 'Deze browser ondersteunt geen meldingen.',
+  };
+  const knop = st === 'uit' ? '<button type="button" class="btn" data-meld="aan">Zet meldingen aan</button>' : st === 'aan' ? '<button type="button" class="btn licht" data-meld="uit">Zet meldingen uit op dit apparaat</button>' : '';
+  if (klein) return `<div class="meld-balk"><span class="ic">🔔</span><span class="tx"><b>Meldingen</b><span>${esc(st === 'beginscherm' ? 'Zet de app op je beginscherm om meldingen te krijgen.' : 'Krijg een melding bij elke trade en spoedzitting.')}</span></span>${st === 'uit' ? '<button type="button" data-meld="aan">Aanzetten</button>' : ''}<button type="button" class="x" data-meld="weg" aria-label="Sluiten">✕</button></div>`;
+  return `<div class="card"><div class="card-h"><h2>Meldingen <span class="tag ${st === 'aan' ? 'VOOR' : 'NIKS'}">${st === 'aan' ? 'AAN' : 'UIT'}</span></h2></div><div class="card-b">
+    <p class="mut" style="font-size:13px;line-height:1.5;margin-bottom:10px">${UITLEG[st]}</p>${knop}<p class="mut" id="meldMelding" style="font-size:12px;margin-top:8px"></p></div></div>`;
+}
+async function verversMeldingen() {
+  meldStand = await meldingStatus();
+  const k = $('#meldKaart'); if (k) k.innerHTML = meldingenKaart();
+  const b = $('#meldBalk'); if (b) b.innerHTML = meldingenKaart(true);
+}
+
 // ---------- HOME: overzicht in vakken ----------
 const NODIG_STEMMEN = 6;
 function stemmenVan(msgs) { return (msgs || []).filter(m => m.phase === 'stem' && m.action?.stem).map(m => ({ id: m.trader_id, stem: m.action.stem, reden: m.text })); }
@@ -352,6 +404,7 @@ function renderHome() {
   ${g ? `<div class="alarm ${g.niveau}"><b>${esc(g.titel)}</b><span>${esc(g.tekst)}</span></div>` : ''}
   ${welkomKaart()}
   <div id="liveKaart"></div>
+  <div id="meldBalk">${meldingenKaart(true)}</div>
   <div class="home-grid"><div class="home-kol">
   ${pfKaart()}
   <div class="alleen-pc">${tegelsKaart(r, vz)}</div>
@@ -784,6 +837,14 @@ document.addEventListener('click', e => {
   if (ms) { marktSort = ms.dataset.msort; tekenMarktLijst(); return; }
   const mo = e.target.closest('[data-mopen]');
   if (mo) { marktOpen = marktOpen === mo.dataset.mopen ? null : mo.dataset.mopen; tekenMarktLijst(); return; }
+  const mk = e.target.closest('[data-meld]');
+  if (mk) {
+    const wat = mk.dataset.meld;
+    if (wat === 'weg') { zetOnthoud('hs-meld-weg', '1'); $('#meldBalk').innerHTML = ''; return; }
+    mk.disabled = true; mk.textContent = 'Even geduld…';
+    (wat === 'aan' ? meldingenAan() : meldingenUit()).then(verversMeldingen).catch(err => { verversMeldingen().then(() => { const m = $('#meldMelding'); if (m) m.textContent = err.message; else alert(err.message); }); });
+    return;
+  }
   const so = e.target.closest('[data-statusopen]');
   if (so && !e.target.closest('a.kijk')) { statusOpen = !statusOpen; toonLive(speler.s); return; }
   const to = e.target.closest('[data-tlopen]');
@@ -863,6 +924,7 @@ function renderBronnen() {
   const k = D.state?.kosten, kostPct = k ? Math.min(1, k.eur / (k.budget || 50)) : 0;
   $('#v-bronnen').innerHTML = `
   <h2 class="pagetitle">Bronnen</h2>
+  <div id="meldKaart">${meldingenKaart()}</div>
   ${k ? `<div class="card"><div class="card-h"><h2>AI-kosten deze maand</h2><span class="chip ${kostPct >= 0.7 ? 'dn' : ''}">${kostPct >= 0.7 ? 'spaarstand' : 'normaal'}</span></div>
         <div class="card-b"><div class="kosten"><b>€${nf(k.eur)}</b><span class="mut">van €${k.budget || 50}</span></div>
         <div class="kbar"><i style="width:${kostPct * 100}%;background:${kostPct >= 0.9 ? 'var(--red)' : kostPct >= 0.7 ? 'var(--gold)' : 'var(--iris)'}"></i><s style="left:70%"></s></div>
@@ -887,6 +949,7 @@ function renderBronnen() {
 // ---------- start ----------
 async function start() {
   D = await laad(); bereken(); window.__D = D;
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').then(verversMeldingen).catch(() => {});
   $('#demoTag').hidden = !D.demo;
   $('#sub').textContent = `${actieveTraders().length} AI-traders · nepgeld${D.demo ? ' · voorbeelddata' : ''}`;
   renderBreaking();

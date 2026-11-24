@@ -1,3 +1,4 @@
+import { vapidSleutels } from './webpush.js';
 // Opslag in Supabase via de REST-API (geen extra pakketten nodig).
 // Voor testen is er een geheugen-versie met precies dezelfde functies.
 
@@ -39,7 +40,7 @@ function supabaseDb(base, key) {
     soort: 'supabase',
     // De hele toestand staat in één jsonb-kolom 'data': zo past elk nieuw veld (kosten, pot, dividend, ...) er altijd in.
     loadState: async () => { const r = (await req('GET', 'state?id=eq.1&select=*'))[0]; if (!r) return null; return r.data ? { ...r.data, id: 1 } : r; },
-    saveState: s => { const { id, updated_at, data, ...rest } = s; return upsert('state', [{ id: 1, data: rest, updated_at: new Date().toISOString() }], 'id'); },
+    saveState: s => { const { id, updated_at, data, ...rest } = s; const v = vapidSleutels(); if (v) rest.vapidPublic = v.publiek; return upsert('state', [{ id: 1, data: rest, updated_at: new Date().toISOString() }], 'id'); },
     loadTraders: () => req('GET', 'traders?select=*&order=joined_at.asc'),
     // Postgres controleert verplichte velden (naam, rol, ...) vóórdat hij ziet dat de trader al bestaat.
     // Een update met alleen de tellers zou dus mislukken: eerst samenvoegen met de bestaande rij.
@@ -63,6 +64,8 @@ function supabaseDb(base, key) {
     bekendeUrls: async urls => { if (!urls.length) return new Set(); const lijst = urls.map(u => `"${u.replace(/"/g, '')}"`).join(','); return new Set((await req('GET', `headlines?select=url&url=in.(${encodeURIComponent(lijst)})`)).map(r => r.url)); },
     laatsteRondes: () => req('GET', 'rounds?select=id,started_at,spoed,status&order=id.desc&limit=30'),
     insertVoorzitting: row => insert('voorzittingen', [row]),
+    pushAbonnementen: () => req('GET', 'push_abonnementen?select=endpoint,p256dh,auth'),
+    verwijderAbonnement: endpoint => req('DELETE', `push_abonnementen?endpoint=eq.${encodeURIComponent(endpoint)}`, undefined, 'return=minimal'),
     zetLive: data => upsert('live', [{ id: 1, data, updated_at: new Date().toISOString() }], 'id'),
     wachtendeVragen: () => req('GET', 'verzoeken?select=*&status=eq.wacht&order=id.asc&limit=5'),
     vragenGestartSinds: async t => (await req('GET', `verzoeken?select=id,uitkomst&status=in.(gestart,klaar)&behandeld_at=gte.${encodeURIComponent(t)}`)).filter(v => v.uitkomst !== 'GEEN VOORSTEL').length,   // mislukte of lege zittingen tellen niet mee
@@ -93,6 +96,8 @@ export function geheugenDb() {
     bekendeUrls: async urls => new Set(d.headlines.map(h => h.url).filter(u => urls.includes(u))),
     laatsteRondes: async () => d.rounds.slice(-30).reverse(),
     insertVoorzitting: async row => { d.voorzittingen.push(row); },
+    pushAbonnementen: async () => d.push || [],
+    verwijderAbonnement: async endpoint => { d.push = (d.push || []).filter(a => a.endpoint !== endpoint); },
     zetLive: async data => { d.live = data && structuredClone(data); d.liveLog.push(data && (data.fase + (data.bronnenKlaar ? '+bronnen' : ''))); },
     wachtendeVragen: async () => d.verzoeken.filter(v => v.status === 'wacht').sort((a, b) => a.id - b.id),
     vragenGestartSinds: async t => d.verzoeken.filter(v => ['gestart', 'klaar'].includes(v.status) && v.uitkomst !== 'GEEN VOORSTEL' && v.behandeld_at >= t).length,
