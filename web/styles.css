@@ -388,3 +388,17 @@ body.inzaal .screenstat{bottom:calc(32vh + 96px)}
   .home-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:start}
   .home .zaal-mini{max-width:760px;margin:0 auto}
 }
+
+/* Statusbalk: wat doet de app nu? */
+#liveKaart:empty{display:none}
+.nb{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:16px;border:1px solid var(--line);background:var(--card);box-shadow:var(--shadow);color:var(--tx)}
+.nb .ic{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;flex:none;font-size:18px}
+.nb .tx{flex:1;min-width:0}.nb .tx b{display:flex;align-items:center;font-family:var(--head);font-size:15px}.nb .tx>span{font-size:12.5px;color:var(--mut);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nb .rt{font:700 12px Inter,system-ui,sans-serif;white-space:nowrap;color:var(--mut)}
+.nb .pls{width:8px;height:8px;border-radius:50%;background:currentColor;display:inline-block;margin-right:7px;flex:none;animation:knipper 1.4s infinite}
+@keyframes knipper{50%{opacity:.25}}
+.nb.rust .ic{background:#EEF1F6;color:#5B6478}
+.nb.check{border-color:#BAE6FD}.nb.check .ic{background:#E0F2FE;color:#0369A1}.nb.check .pls,.nb.check .rt{color:#0369A1}
+.nb.nvz{border-color:#FDE68A;background:#FFFBEB}.nb.nvz .ic{background:#FEF3C7;color:#92400E}.nb.nvz .pls,.nb.nvz .rt{color:#B45309}
+.nb.zit{background:var(--iris);border-color:var(--iris);color:#fff}.nb.zit .ic{background:rgba(255,255,255,.2)}.nb.zit .tx>span,.nb.zit .rt{color:rgba(255,255,255,.92)}
+.nb.vraag{border-color:#FDC9A6}.nb.vraag .ic{background:#FFF1E6;color:#C2410C;font-weight:800}.nb.vraag .rt{color:#C2410C}

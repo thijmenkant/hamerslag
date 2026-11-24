@@ -160,6 +160,11 @@ export async function zittingscheck({ db = maakDb(), koersen = alleKoersen, nieu
   const minSinds = laatste ? (nu - new Date(laatste.started_at)) / 60000 : Infinity;
   if (minSinds < ZITTING.rustMin) { log(`uurcheck: vorige zitting ${Math.round(minSinds)} min geleden`); return { gestart: false, reden: 'net een zitting' }; }
 
+  // De app laat zien wat de motor nu doet (statusbalk): eerst 'uurcheck bezig', daarna 'voorzitting over ...'
+  const seintje = async nuStand => { if (!db.saveState || staat.cash == null) return;   // nog geen portefeuille: niets opslaan, dat doet de eerste zitting
+    staat.nu = { ...nuStand, t: nu.toISOString() }; try { await db.saveState(staat); } catch (e) { log('⚠ status opslaan mislukt:', e.message); } };
+  await seintje({ fase: 'check' });
+
   // Stap 1: gebeurt er iets?
   const k = await koersen(Object.keys(staat.positions || {}));
   let lijst = [];
@@ -173,7 +178,7 @@ export async function zittingscheck({ db = maakDb(), koersen = alleKoersen, nieu
   for (const r of redenen) if (r.soort === 'cijfers') (staat.cijfersGemeld ||= {})[r.sym] = nu.toISOString().slice(0, 10);
   const vorigeCheck = staat.laatsteCheck;
   staat.laatsteCheck = { t: nu.toISOString(), prijzen: Object.fromEntries(k.map(x => [x.sym, x.prijs])) };
-  const bewaar = async () => { bewaarIn(staat); if (db.saveState && Object.keys(staat).length > 1) await db.saveState(staat); };
+  const bewaar = async () => { delete staat.nu; bewaarIn(staat); if (db.saveState && Object.keys(staat).length > 1) await db.saveState(staat); };
   if (!redenen.length) {
     await bewaar();
     await db.insertVoorzitting?.({ t: nu.toISOString(), aanleiding: [], kansen: [], besluit: 'RUSTIG', reden: 'Niets bijzonders bewogen en geen nieuw nieuws.' });
@@ -186,6 +191,7 @@ export async function zittingscheck({ db = maakDb(), koersen = alleKoersen, nieu
   const vangnet = redenen.some(r => r.soort === 'vangnet');
   const usdStart = llm.verbruik?.usd || 0;
   let uitkomst;
+  await seintje({ fase: 'voorzitting', assets: [...new Set(redenen.flatMap(r => r.sym ? [r.sym] : (r.assets || [])).filter(a => a && a !== 'MARKT'))].slice(0, 3), onderwerp: redenen[0]?.tekst?.replace(/^nieuws: /, '') || '' });
   try {
     const p = voorzittingPrompt({ redenen, koersen: k, staat });
     // De voorzitting draait op Sonnet 5.5: hier begint elke geldbeslissing, dus een slimmer model. In de spaarstand Haiku.

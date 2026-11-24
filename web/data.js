@@ -111,3 +111,19 @@ export async function laadVragen() {
   if (error) throw error;
   return data || [];
 }
+
+// Elke 30 seconden: wat doet de motor nu (uurcheck, voorzitting), en is er een nieuwe voorzitting?
+let laatsteVz = null;
+export async function laadNu() {
+  if (!isLive()) return null;
+  const c = await client();
+  const [st, vz, vr] = await Promise.all([
+    c.from('state').select('data').eq('id', 1).maybeSingle(),
+    c.from('voorzittingen').select('*').order('id', { ascending: false }).limit(48),
+    c.from('verzoeken').select('*').order('id', { ascending: false }).limit(10),
+  ]);
+  const d = st.data?.data || {};
+  const nieuweCheck = laatsteVz !== null && vz.data?.[0]?.id !== laatsteVz;
+  laatsteVz = vz.data?.[0]?.id ?? null;
+  return { nu: d.nu || null, bronStatus: d.bronStatus, voorzittingen: vz.data || [], vragen: vr.data || [], nieuweCheck };
+}

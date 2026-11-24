@@ -1,5 +1,5 @@
 import { avatarUrl } from './avatar.js';
-import { laad, abonneer, isLive, session, login, bronnenVoorRonde, laadRonde, stelVraag, laadVragen } from './data.js';
+import { laad, abonneer, isLive, session, login, bronnenVoorRonde, laadRonde, stelVraag, laadVragen, laadNu } from './data.js';
 import { Speler } from './player.js';
 
 // ---------- helpers ----------
@@ -134,12 +134,27 @@ function welkomKaart() {
 }
 // Live: alleen zichtbaar als er nu een zitting bezig is
 function isBezig(s = speler.s) { return D.round?.status === 'bezig' || (D.demo && s.fase !== 'wachten' && s.fase !== 'uitslag'); }
+// Statusbalk bovenaan het homescherm: wat doet de app nu? (rustig, uurcheck, voorzitting, zitting, jouw vraag)
+function statusBalk(s = speler.s) {
+  const pls = '<i class="pls"></i>';
+  if (isBezig(s)) {
+    const naam = s.spoed ? 'Spoedzitting' : `Zitting ${D.round?.no ?? ''}`;
+    const p = s.voorstel || D.round?.proposal;
+    return `<a class="nb zit" href="#zaal"><span class="ic">🔨</span><span class="tx"><b>${pls}${esc(naam)} · nu live</b><span>${p ? `Op tafel: ${p.actie === 'KOOP' ? 'Koop' : 'Verkoop'} ${eur(p.bedrag, 0)} ${esc(p.asset)} · ` : ''}${esc(faseTekst(s))}</span></span><span class="rt">Kijk mee →</span></a>`;
+  }
+  const nu = D.state?.nu, vers = nu?.t && Date.now() - new Date(nu.t) < 10 * 60000;
+  if (vers && nu.fase === 'voorzitting') return `<div class="nb nvz"><span class="ic">⚖</span><span class="tx"><b>${pls}Voorzitting${nu.assets?.length ? ' over ' + esc(nu.assets.slice(0, 2).join(' en ')) : ''}</b><span>Eva, Daan en Noor bekijken: ${esc(nu.onderwerp || 'wat er het afgelopen uur gebeurde')}</span></span><span class="rt">nu</span></div>`;
+  if (vers && nu.fase === 'check') return `<div class="nb check"><span class="ic">⟳</span><span class="tx"><b>${pls}Uurcheck bezig</b><span>Koersen en nieuws ophalen: is er iets gebeurd?</span></span><span class="rt">nu</span></div>`;
+  const vraag = (D.vragen || []).find(v => v.status === 'wacht' || v.status === 'gestart');
+  if (vraag) return `<div class="nb vraag"><span class="ic">?</span><span class="tx"><b>Jouw vraag staat klaar</b><span>"${esc(vraag.vraag)}" · ${esc(vraag.reden || 'start binnen 5 minuten')}</span></span><span class="rt">${/15:30/.test(vraag.reden || '') ? '15:30' : '≤ 5 min'}</span></div>`;
+  const vz = (D.voorzittingen || [])[0], volgende = volgendeRonde(), min = Math.max(0, Math.round((volgende - Date.now()) / 60000));
+  const vorige = vz ? `laatste: ${tijd(vz.t)}, ${vz.besluit === 'ZITTING' ? 'zitting gehouden' : vz.besluit === 'RUSTIG' ? 'niets bijzonders' : `geen zitting${vz.kansen?.[0] ? ` (${vz.kansen[0].asset} ${vz.kansen[0].score}/10)` : ''}`}` : 'nog geen check gehad';
+  return `<div class="nb rust"><span class="ic">◷</span><span class="tx"><b>Alles rustig</b><span>Volgende check om ${String(volgende.getHours()).padStart(2, '0')}:00 · ${esc(vorige)}</span></span><span class="rt">over ${min} min</span></div>`;
+}
 function toonLive(s) {
   const el = $('#liveKaart'); if (!el) return;
-  if (!isBezig(s)) { el.innerHTML = ''; return; }
-  const naam = s.spoed ? 'Spoedzitting' : `Zitting ${D.round?.no ?? ''}`;
-  el.innerHTML = `<a class="livekaart" href="#zaal"><span class="pols"><span class="dot red" style="background:#fff"></span>NU LIVE</span>
-    <span class="lk-t"><b>${esc(naam)} is bezig</b><small>${esc(faseTekst(s))}</small></span><span class="lk-k">Kijk mee →</span></a>`;
+  const html = statusBalk(s);
+  if (el.dataset.html !== html) { el.innerHTML = html; el.dataset.html = html; }
 }
 // Laatste besluit: wat het parlement het laatst besloot, met de knop naar de zaal
 function besluitKaart() {
@@ -237,10 +252,10 @@ function renderHome() {
   $('#v-home').innerHTML = `<div class="home">
   ${g ? `<div class="alarm ${g.niveau}"><b>${esc(g.titel)}</b><span>${esc(g.tekst)}</span></div>` : ''}
   ${welkomKaart()}
+  <div id="liveKaart"></div>
   <div class="home-grid"><div class="home-kol">
   ${pfKaart()}
   ${tegelsKaart(r, vz)}
-  <div id="liveKaart"></div>
   <div id="vraagVak">${vraagKaart()}</div>
   </div><div class="home-kol">
   ${zittingKaart(r, msgs)}
@@ -777,6 +792,8 @@ async function start() {
   else speler.eindstand(D.round, D.messages);
   route();
   setInterval(tikStatus, 1000); tikStatus();
+  setInterval(() => toonLive(speler.s), 20000);
+  setInterval(async () => { if (D.demo || document.hidden) return; try { const n = await laadNu(); if (n) { D.state = { ...D.state, nu: n.nu, bronStatus: n.bronStatus || D.state?.bronStatus }; D.vragen = n.vragen || D.vragen; if (n.nieuweCheck) { D.voorzittingen = n.voorzittingen; if ((location.hash || '#home') === '#home') renderHome(); } else toonLive(speler.s); } } catch {} }, 30000);
 
   let herlaad;
   await abonneer({
