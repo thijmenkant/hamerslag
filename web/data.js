@@ -33,14 +33,14 @@ export async function laad() {
     const d = await import('./demo.js');
     return {
       demo: true, traders: d.DEMO_TRADERS, market: d.DEMO_MARKET, state: d.DEMO_STATE, snapshots: d.DEMO_SNAPSHOTS,
-      trades: d.DEMO_TRADES.slice().reverse(), headlines: d.DEMO_HEADLINES, round: d.DEMO_ROUND, besluit: d.DEMO_ROUND, rondes: [{ id: 14, ...d.DEMO_ROUND }], vragen: demoVragen,
+      trades: d.DEMO_TRADES.slice().reverse(), headlines: d.DEMO_HEADLINES, round: d.DEMO_ROUND, besluit: d.DEMO_ROUND, rondes: [{ id: 14, ...d.DEMO_ROUND }], vragen: demoVragen, live: { fase: 'zitting', spoed: true, t: new Date().toISOString(), bronnenKlaar: true, onderwerp: d.DEMO_ROUND.spoed?.titel, stappen: [['Wisselkoers', 'ECB via Frankfurter', '$1 = €0,93'], ['Cryptokoersen', 'CoinGecko, gecontroleerd met Bitvavo', '41 munten'], ["Aandelen en ETF's", 'Finnhub (FMP als reserve)', '86 koersen'], ['Nieuws', 'Finnhub, NOS, CoinDesk, ECB, Fed', '20 berichten'], ['Stemming op de markt', 'Fear & Greed', '32/100'], ['Bedrijfsnieuws', 'Finnhub', '7 berichten'], ['Officiële meldingen', 'SEC EDGAR', '2 meldingen'], ['Rente en inflatie', 'FRED', '7 cijfers'], ['Cijferkalender', 'Finnhub', '12 deze week']].map(([naam, bron, aantal], i) => ({ id: 's' + i, naam, bron, aantal, status: 'ok' })) },
       messages: d.DEMO_MESSAGES, sources: d.DEMO_SOURCES, voorzittingen: d.DEMO_VOORZITTINGEN,
     };
   }
   const c = await client();
   const q = async p => { const { data, error } = await p; if (error) throw error; return data; };
   const sinds = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-  const [traders, market, state, snapshots, trades, headlines, rounds, voorzittingen, vragen] = await Promise.all([
+  const [traders, market, state, snapshots, trades, headlines, rounds, voorzittingen, vragen, live] = await Promise.all([
     q(c.from('traders').select('*').order('joined_at')),
     q(c.from('market').select('*')),
     q(c.from('state').select('*').eq('id', 1).maybeSingle()).then(r => r?.data ? { ...r.data, id: 1 } : r),
@@ -50,6 +50,7 @@ export async function laad() {
     q(c.from('rounds').select('*').order('id', { ascending: false }).limit(30)),
     q(c.from('voorzittingen').select('*').order('id', { ascending: false }).limit(48)),
     laadVragen().catch(() => []),
+    c.from('live').select('data').eq('id', 1).maybeSingle().then(r => r.data?.data || null, () => null),
   ]);
   // Laatste afgeronde of lopende ronde
   // 'bezig' telt alleen als hij nog vers is: een zitting die ooit halverwege stopte blijft anders eeuwig 'live'
@@ -63,7 +64,7 @@ export async function laad() {
     ]);
     messages = m; sources = Object.fromEntries(s.map(x => [x.id, x]));
   }
-  return { demo: false, traders, market, state, snapshots: snapshots.reverse(), trades, headlines, round, laatste: rounds[0] || null, besluit: rounds.find(r => r.status === 'klaar') || null, rondes: rounds, voorzittingen, vragen, messages, sources };
+  return { demo: false, traders, market, state, snapshots: snapshots.reverse(), trades, headlines, round, laatste: rounds[0] || null, besluit: rounds.find(r => r.status === 'klaar') || null, rondes: rounds, voorzittingen, vragen, live, messages, sources };
 }
 
 // Live updates: nieuwe berichten, rondes en koersen
@@ -117,13 +118,12 @@ let laatsteVz = null;
 export async function laadNu() {
   if (!isLive()) return null;
   const c = await client();
-  const [st, vz, vr] = await Promise.all([
-    c.from('state').select('data').eq('id', 1).maybeSingle(),
+  const [li, vz, vr] = await Promise.all([
+    c.from('live').select('data').eq('id', 1).maybeSingle(),
     c.from('voorzittingen').select('*').order('id', { ascending: false }).limit(48),
     c.from('verzoeken').select('*').order('id', { ascending: false }).limit(10),
   ]);
-  const d = st.data?.data || {};
   const nieuweCheck = laatsteVz !== null && vz.data?.[0]?.id !== laatsteVz;
   laatsteVz = vz.data?.[0]?.id ?? null;
-  return { nu: d.nu || null, bronStatus: d.bronStatus, voorzittingen: vz.data || [], vragen: vr.data || [], nieuweCheck };
+  return { live: li.data?.data || null, voorzittingen: vz.data || [], vragen: vr.data || [], nieuweCheck };
 }

@@ -166,3 +166,15 @@ drop policy if exists "verzoeken toevoegen" on verzoeken;
 create policy "verzoeken toevoegen" on verzoeken for insert to authenticated with check (status = 'wacht' and round_no is null and behandeld_at is null);
 grant select, insert on verzoeken to authenticated;
 grant all on verzoeken to service_role;
+
+-- Live voortgang voor de statusbalk (één rij): welke bronnen zijn binnen, in welke fase zit de motor.
+create table if not exists live (
+  id int primary key default 1 check (id = 1),
+  data jsonb,
+  updated_at timestamptz default now()
+);
+alter table live enable row level security;
+drop policy if exists "live lezen" on live;
+create policy "live lezen" on live for select to authenticated using (true);
+grant select on live to authenticated;
+grant all on live to service_role;

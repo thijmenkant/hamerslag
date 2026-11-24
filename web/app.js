@@ -135,25 +135,65 @@ function welkomKaart() {
 // Live: alleen zichtbaar als er nu een zitting bezig is
 function isBezig(s = speler.s) { return D.round?.status === 'bezig' || (D.demo && s.fase !== 'wachten' && s.fase !== 'uitslag'); }
 // Statusbalk bovenaan het homescherm: wat doet de app nu? (rustig, uurcheck, voorzitting, zitting, jouw vraag)
-function statusBalk(s = speler.s) {
-  const pls = '<i class="pls"></i>';
+// Tik erop: de voortgang met percentage en welke bronnen er al binnen zijn.
+let statusOpen = false;
+const liveVers = () => { const L = D.live; return L && L.t && Date.now() - new Date(L.t) < 15 * 60000 ? L : null; };
+function stappenDeel(L) {
+  const st = L?.stappen || []; if (!st.length) return 0;
+  return st.reduce((a, x) => a + (['ok', 'fout', 'uit', 'overgeslagen'].includes(x.status) ? 1 : x.status === 'bezig' ? 0.5 : 0), 0) / st.length;
+}
+const FASEN = ['Bronnen', 'Voorstellen', 'Debat', 'Stemming', 'Uitslag'];
+function voortgang(s = speler.s) {
+  const L = liveVers();
   if (isBezig(s)) {
-    const naam = s.spoed ? 'Spoedzitting' : `Zitting ${D.round?.no ?? ''}`;
-    const p = s.voorstel || D.round?.proposal;
-    return `<a class="nb zit" href="#zaal"><span class="ic">🔨</span><span class="tx"><b>${pls}${esc(naam)} · nu live</b><span>${p ? `Op tafel: ${p.actie === 'KOOP' ? 'Koop' : 'Verkoop'} ${eur(p.bedrag, 0)} ${esc(p.asset)} · ` : ''}${esc(faseTekst(s))}</span></span><span class="rt">Kijk mee →</span></a>`;
+    if (L?.fase === 'zitting' && !L.bronnenKlaar) return { pct: Math.round(stappenDeel(L) * 50), fase: 0 };
+    const f = s.fase, n = (s.transcript || []).filter(m => m.phase === 'debat').length;
+    if (f === 'analyse') return { pct: 52, fase: 1 };
+    if (f === 'voorstel') return { pct: 56, fase: 1 };
+    if (f === 'debat') return { pct: Math.min(86, 60 + n * 2), fase: 2 };
+    if (f === 'stemming') return { pct: 90 + Math.min(8, Object.keys(s.stemmen || {}).length), fase: 3 };
+    if (f === 'uitslag') return { pct: 100, fase: 4 };
+    return { pct: 50, fase: 1 };
   }
-  const nu = D.state?.nu, vers = nu?.t && Date.now() - new Date(nu.t) < 10 * 60000;
-  if (vers && nu.fase === 'voorzitting') return `<div class="nb nvz"><span class="ic">⚖</span><span class="tx"><b>${pls}Voorzitting${nu.assets?.length ? ' over ' + esc(nu.assets.slice(0, 2).join(' en ')) : ''}</b><span>Eva, Daan en Noor bekijken: ${esc(nu.onderwerp || 'wat er het afgelopen uur gebeurde')}</span></span><span class="rt">nu</span></div>`;
-  if (vers && nu.fase === 'check') return `<div class="nb check"><span class="ic">⟳</span><span class="tx"><b>${pls}Uurcheck bezig</b><span>Koersen en nieuws ophalen: is er iets gebeurd?</span></span><span class="rt">nu</span></div>`;
+  if (L?.fase === 'zitting') return { pct: Math.round(stappenDeel(L) * 50), fase: 0 };
+  if (L?.fase === 'check') return { pct: Math.round(stappenDeel(L) * 80), fase: null };
+  if (L?.fase === 'voorzitting') return { pct: 90, fase: null };
+  return null;
+}
+function statusBalk(s = speler.s) {
+  const pls = '<i class="pls"></i>', L = liveVers(), vg = voortgang(s);
+  const pijl = vg ? `<span class="rt" data-statusopen>${vg.pct}% ${statusOpen ? '▾' : '▴'}</span>` : '';
+  if (isBezig(s) || L?.fase === 'zitting') {
+    const naam = s.spoed || L?.spoed ? 'Spoedzitting' : `Zitting ${isBezig(s) ? (D.round?.no ?? '') : ''}`.trim();
+    const p = isBezig(s) ? (s.voorstel || D.round?.proposal) : null;
+    const wat = p ? `Op tafel: ${p.actie === 'KOOP' ? 'Koop' : 'Verkoop'} ${eur(p.bedrag, 0)} ${esc(p.asset)} · ${esc(faseTekst(s))}` : `${L?.onderwerp ? esc(L.onderwerp) + ' · ' : ''}${vg?.fase === 0 ? 'bronnen ophalen' : esc(faseTekst(s))}`;
+    return `<div class="nb zit" data-statusopen><span class="ic">🔨</span><span class="tx"><b>${pls}${esc(naam)} · nu live</b><span>${wat}</span></span>${pijl}<a class="kijk" href="#zaal">Kijk mee →</a></div>`;
+  }
+  if (L?.fase === 'voorzitting') return `<div class="nb nvz" data-statusopen><span class="ic">⚖</span><span class="tx"><b>${pls}Voorzitting${L.assets?.length ? ' over ' + esc(L.assets.slice(0, 2).join(' en ')) : ''}</b><span>Eva, Daan en Noor bekijken: ${esc(L.onderwerp || 'wat er het afgelopen uur gebeurde')}</span></span>${pijl}</div>`;
+  if (L?.fase === 'check') return `<div class="nb check" data-statusopen><span class="ic">⟳</span><span class="tx"><b>${pls}Uurcheck bezig</b><span>Koersen en nieuws ophalen: is er iets gebeurd?</span></span>${pijl}</div>`;
   const vraag = (D.vragen || []).find(v => v.status === 'wacht' || v.status === 'gestart');
   if (vraag) return `<div class="nb vraag"><span class="ic">?</span><span class="tx"><b>Jouw vraag staat klaar</b><span>"${esc(vraag.vraag)}" · ${esc(vraag.reden || 'start binnen 5 minuten')}</span></span><span class="rt">${/15:30/.test(vraag.reden || '') ? '15:30' : '≤ 5 min'}</span></div>`;
   const vz = (D.voorzittingen || [])[0], volgende = volgendeRonde(), min = Math.max(0, Math.round((volgende - Date.now()) / 60000));
   const vorige = vz ? `laatste: ${tijd(vz.t)}, ${vz.besluit === 'ZITTING' ? 'zitting gehouden' : vz.besluit === 'RUSTIG' ? 'niets bijzonders' : `geen zitting${vz.kansen?.[0] ? ` (${vz.kansen[0].asset} ${vz.kansen[0].score}/10)` : ''}`}` : 'nog geen check gehad';
   return `<div class="nb rust"><span class="ic">◷</span><span class="tx"><b>Alles rustig</b><span>Volgende check om ${String(volgende.getHours()).padStart(2, '0')}:00 · ${esc(vorige)}</span></span><span class="rt">over ${min} min</span></div>`;
 }
+function statusPaneel(s = speler.s) {
+  const vg = voortgang(s), L = liveVers();
+  if (!statusOpen || !vg) return '';
+  const st = L?.stappen || [];
+  const TEKST = { ok: a => a || 'binnen', fout: () => 'mislukt', uit: () => 'niet ingesteld', overgeslagen: () => 'niet nodig', bezig: () => 'bezig…', wacht: () => 'wacht' };
+  const titel = L?.fase === 'check' ? 'Uurcheck' : L?.fase === 'voorzitting' ? 'Voorzitting' : 'Verloop van de zitting';
+  return `<div class="pan">
+    <div class="pt"><b>${titel}</b><span class="pc">${vg.pct}%</span></div>
+    <div class="pbar"><i style="width:${vg.pct}%"></i></div>
+    ${vg.fase != null ? `<div class="fasen">${FASEN.map((f, i) => `<span class="${i < vg.fase ? 'ok' : i === vg.fase ? 'on' : ''}">${i === vg.fase ? '● ' : i < vg.fase ? '✓ ' : ''}${f}</span>`).join('')}</div>` : L?.fase === 'voorzitting' ? '<div class="fasen"><span class="ok">✓ Bronnen</span><span class="on">● Voorzitter beslist</span><span>Zitting?</span></div>' : ''}
+    ${st.map(x => `<div class="st ${x.status}"><span class="l">${x.status === 'ok' ? '✓' : x.status === 'fout' ? '!' : ''}</span><span class="n">${esc(x.naam)}<small>${esc(x.bron)}</small></span><span class="a">${esc(TEKST[x.status]?.(x.aantal) || x.status)}</span></div>`).join('') || '<p class="mut" style="font-size:12.5px;margin-top:8px">De bronnen zijn al binnen.</p>'}
+    ${isBezig(s) || L?.fase === 'zitting' ? '<a class="btn" href="#zaal" style="margin-top:12px">Kijk mee in de zaal →</a>' : ''}
+  </div>`;
+}
 function toonLive(s) {
   const el = $('#liveKaart'); if (!el) return;
-  const html = statusBalk(s);
+  const html = statusBalk(s) + statusPaneel(s);
   if (el.dataset.html !== html) { el.innerHTML = html; el.dataset.html = html; }
 }
 // Laatste besluit: wat het parlement het laatst besloot, met de knop naar de zaal
@@ -686,6 +726,8 @@ document.addEventListener('click', e => {
   if (ms) { marktSort = ms.dataset.msort; tekenMarktLijst(); return; }
   const mo = e.target.closest('[data-mopen]');
   if (mo) { marktOpen = marktOpen === mo.dataset.mopen ? null : mo.dataset.mopen; tekenMarktLijst(); return; }
+  const so = e.target.closest('[data-statusopen]');
+  if (so && !e.target.closest('a.kijk')) { statusOpen = !statusOpen; toonLive(speler.s); return; }
   const vv = e.target.closest('[data-vraagvoorbeeld]');
   if (vv) { const i = $('#vraagIn'); if (i) { i.value = vv.dataset.vraagvoorbeeld; i.focus(); } return; }
   const lb = e.target.closest('[data-logboek]');
@@ -793,7 +835,21 @@ async function start() {
   route();
   setInterval(tikStatus, 1000); tikStatus();
   setInterval(() => toonLive(speler.s), 20000);
-  setInterval(async () => { if (D.demo || document.hidden) return; try { const n = await laadNu(); if (n) { D.state = { ...D.state, nu: n.nu, bronStatus: n.bronStatus || D.state?.bronStatus }; D.vragen = n.vragen || D.vragen; if (n.nieuweCheck) { D.voorzittingen = n.voorzittingen; if ((location.hash || '#home') === '#home') renderHome(); } else toonLive(speler.s); } } catch {} }, 30000);
+  const peil = async () => {
+    let wacht = 30000;
+    if (!D.demo && !document.hidden) {
+      try {
+        const n = await laadNu();
+        if (n) {
+          D.live = n.live; D.vragen = n.vragen || D.vragen;
+          if (n.nieuweCheck) { D.voorzittingen = n.voorzittingen; if ((location.hash || '#home') === '#home') renderHome(); } else toonLive(speler.s);
+          if (n.live || isBezig()) wacht = 5000;
+        }
+      } catch {}
+    }
+    setTimeout(peil, wacht);
+  };
+  setTimeout(peil, 5000);
 
   let herlaad;
   await abonneer({

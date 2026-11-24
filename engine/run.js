@@ -1,3 +1,4 @@
+import { maakVoortgang } from './voortgang.js';
 import { bewaarIn } from './bronstatus.js';
 // Eén zitting van Hamerslag. Wordt gestart door de uurcheck (zittingscheck.js) of de nieuwsreflex.
 //   node run.js            → echte ronde (met sleutels uit de omgeving)
@@ -29,11 +30,14 @@ export async function ronde({ db = maakDb(), bronnen = verzamelBronnen, llm = ll
   }
   const markt = Object.fromEntries((await db.loadMarket()).map(m => [m.symbol, m]));
 
-  // 2. Bronnen ophalen
+  // 2. Bronnen ophalen (met live voortgang voor de statusbalk in de app)
+  const vraagA = aanleiding?.find(a => a.soort === 'vraag');
+  const vg = maakVoortgang(db, { fase: 'zitting', spoed: !!spoed, onderwerp: vraagA ? vraagA.tekst.replace(/^vraag van de eigenaar: /, 'Jouw vraag: ') : spoed ? spoed.titel : (aanleiding || []).filter(a => a.soort !== 'agenda').map(a => a.tekst).join(' · ') });
   const ruw = await bronnen({ bezit: Object.keys((await db.loadState())?.positions || {}), focus: [...(agenda || []).map(k => k.asset), ...(spoed?.assets || [])], nu });
   ruw.fouten.forEach(f => log('⚠ bron mislukt:', f));
   if (spoed && !ruw.nieuws.some(n => n.url === spoed.url)) ruw.nieuws.unshift(spoed);
-  if (!ruw.koersen.length) throw new Error('Geen enkele koers opgehaald, ronde afgebroken.');
+  if (!ruw.koersen.length) { await vg.stop(); throw new Error('Geen enkele koers opgehaald, ronde afgebroken.'); }
+  vg.bronnenKlaar();
   const prijzen = { ...Object.fromEntries(Object.values(markt).map(m => [m.symbol, Number(m.price)])), ...Object.fromEntries(ruw.koersen.map(k => [k.sym, k.prijs])) };
 
   // Koersgeschiedenis bijwerken (1 punt per ronde) en indicatoren berekenen
@@ -63,6 +67,7 @@ export async function ronde({ db = maakDb(), bronnen = verzamelBronnen, llm = ll
     if (!staat.kosten.gestopt) { staat.kosten.gestopt = true; await push({ titel: 'Hamerslag gepauzeerd', tekst: `Het maandbudget van €${CONFIG.budgetEur} is op (€${staat.kosten.eur.toFixed(2)}). Volgende maand gaat het vanzelf verder.`, prio: 5, tags: ['money_with_wings'] }); }
     bewaarIn(staat); await db.saveState(staat);
     log(`budget op: €${staat.kosten.eur.toFixed(2)} van €${CONFIG.budgetEur}, geen ronde`);
+    await vg.stop();
     return { uitkomst: 'BUDGET' };
   }
   const spaarstand = staat.kosten.eur >= CONFIG.budgetEur * CONFIG.spaarstandVanaf;
@@ -266,8 +271,10 @@ export async function ronde({ db = maakDb(), bronnen = verzamelBronnen, llm = ll
     })));
     await db.updateRound(round.id, { status: 'klaar', phase: 'klaar', outcome: uitkomst, votes_for: voor, trade, finished_at: new Date().toISOString() });
     log(`ronde ${no} klaar: ${uitkomst}${voor != null ? ` (${voor} voor)` : ''} · waarde €${v.toFixed(2)} · vasthouden €${b.toFixed(2)} · AI-calls ${llm.verbruik.calls}, tokens in ${llm.verbruik.input} uit ${llm.verbruik.output}`);
+    await vg.stop();
     return { no, uitkomst, voor, waarde: v, bench: b, trade };
   } catch (e) {
+    await vg.stop();
     await db.updateRound(round.id, { status: 'fout', phase: 'fout', error: String(e.message).slice(0, 500), finished_at: new Date().toISOString() });
     await boekKosten().catch(() => {});
     bewaarIn(staat); await db.saveState(staat);
