@@ -115,7 +115,7 @@ export async function ronde({ db = maakDb(), bronnen = verzamelBronnen, llm = ll
 
   // 5. Ronde aanmaken
   const no = (await db.lastRoundNo()) + 1;
-  const round = await db.createRound({ no, started_at: nu.toISOString(), status: 'bezig', phase: 'analyse', spoed: spoed ? { titel: spoed.titel, url: spoed.url, uitgever: spoed.uitgever, tijd: spoed.tijd, assets: spoed.assets, belang: spoed.belang } : null, aanleiding: aanleiding?.length || agenda?.length ? [...(aanleiding || []), ...(agenda || []).map(k => ({ soort: 'agenda', tekst: `kans: ${k.asset} ${k.richting.toLowerCase()} (${k.score}/10)` }))] : null });
+  const round = await db.createRound({ no, started_at: nu.toISOString(), status: 'bezig', phase: 'analyse', spoed: spoed ? { titel: spoed.titel, url: spoed.url, uitgever: spoed.uitgever, tijd: spoed.tijd, assets: spoed.assets, belang: spoed.belang } : null, aanleiding: aanleiding?.length || agenda?.length ? [...(aanleiding || []), ...(vraagA ? [] : agenda || []).map(k => ({ soort: 'agenda', tekst: `kans: ${k.asset} ${k.richting.toLowerCase()} (${k.score}/10)` }))] : null });
   await db.insertSources(pakket.map(b => ({ round_id: round.id, ...b })));
   await db.insertHeadlines(ruw.nieuws.filter(n => n.url).map(n => ({ round_id: round.id, title: n.titel, publisher: n.uitgever, url: n.url, published_at: n.tijd, category: n.categorie, importance: n.belang })));
   let seq = 0;
