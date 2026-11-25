@@ -1,5 +1,6 @@
 import { maakVoortgang } from './voortgang.js';
 import { maakUitleg, simpelNieuws } from './uitleg.js';
+import { naarMarktRijen } from './markt.js';
 import { bewaarIn } from './bronstatus.js';
 // Eén zitting van Hamerslag. Wordt gestart door de uurcheck (zittingscheck.js) of de nieuwsreflex.
 //   node run.js            → echte ronde (met sleutels uit de omgeving)
@@ -42,13 +43,7 @@ export async function ronde({ db = maakDb(), bronnen = verzamelBronnen, llm = ll
   const prijzen = { ...Object.fromEntries(Object.values(markt).map(m => [m.symbol, Number(m.price)])), ...Object.fromEntries(ruw.koersen.map(k => [k.sym, k.prijs])) };
 
   // Koersgeschiedenis bijwerken (1 punt per ronde) en indicatoren berekenen
-  const ind = {};
-  const marktRows = ruw.koersen.map(k => {
-    const a = vindAsset(k.sym) || { naam: k.naam, soort: k.soort };
-    const hist = [...(markt[k.sym]?.history || []), round2(k.prijs * 1e4) / 1e4].slice(-CONFIG.historiePunten);
-    ind[k.sym] = indicatoren(hist);
-    return { symbol: k.sym, name: k.naam || a.naam, kind: k.soort || a.soort, cat: a.cat || (k.soort === 'crypto' ? 'crypto' : null), rank: k.rank ?? a.rank ?? null, price: k.prijs, chg1h: fin(k.chg1h), chg24h: fin(k.chg24h), chg7d: fin(k.chg7d), source: k.bron, url: k.url, updated_at: k.tijd, history: hist, rsi: ind[k.sym].rsi ?? null, trend: ind[k.sym].trend ?? null };
-  });
+  const { rijen: marktRows, ind } = naarMarktRijen(ruw.koersen, markt);
   await db.upsertMarket(marktRows);
   const radar = kiesRadar(ruw, await db.loadState(), spoed, agenda);
   const pakket = maakPakket(ruw, ind, radar);

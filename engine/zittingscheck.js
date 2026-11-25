@@ -19,6 +19,7 @@ import { CONFIG, ZITTING, SYMS, UNIVERSUM, MODELLEN, vindAsset, beursOpen, env }
 import { fetchUsdEur, fetchNews, haalKoersen, verwerkNieuws } from './sources.js';
 import { fetchBedrijfsnieuws, fetchSecMeldingen, fetchCijferkalender } from './extra.js';
 import { maakVoortgang } from './voortgang.js';
+import { naarMarktRijen, snapshotNu } from './markt.js';
 import { bewaarIn, meld, meet } from './bronstatus.js';
 import { maakDb } from './db.js';
 import { ronde } from './run.js';
@@ -173,6 +174,14 @@ export async function zittingscheck({ db = maakDb(), koersen = alleKoersen, nieu
 
   // Stap 1: gebeurt er iets?
   const k = await koersen(Object.keys(staat.positions || {}));
+  // Verse koersen elk uur in de app (Markt en Portefeuille), plus een punt in de grafiek van je portefeuille
+  if (k?.length && db.upsertMarket) {
+    try {
+      const markt = Object.fromEntries((await db.loadMarket()).map(m => [m.symbol, m]));
+      await db.upsertMarket(naarMarktRijen(k, markt).rijen);
+      await snapshotNu(db, staat, nu);
+    } catch (e) { log('⚠ koersen opslaan mislukt:', e.message); }
+  }
   let lijst = [];
   try { lijst = await nieuws(); } catch (e) { log('⚠ nieuws ophalen mislukt:', e.message); }
   const bezit = Object.keys(staat.positions || {}).filter(s => staat.positions[s]?.qty > 0);

@@ -513,3 +513,21 @@ button.tl-it{cursor:pointer}button.tl-it:hover{border-color:var(--line2)}
 .ul-r{display:flex;gap:10px;align-items:flex-start}.ul-i{font-size:16px;line-height:1.2;flex:none;width:22px;text-align:center}
 .ul-r .eyebrow{display:block}.ul-r p{font-size:13.5px;line-height:1.5;margin-top:2px;color:var(--tx)}
 .tl-waarom{font-size:12.5px;color:var(--mut);margin-top:4px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
+/* Home: volgorde portefeuille > uur voor uur > vraag > zaal; pc: tijdlijn rechts */
+.home-grid{display:grid;grid-template-columns:minmax(0,1fr);grid-template-areas:"pf" "tl" "vraag";gap:14px}
+.hg-pf{grid-area:pf}.hg-tegels{grid-area:tegels}.hg-tl{grid-area:tl}.hg-vraag{grid-area:vraag}
+@media (min-width:980px){
+  .home-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"pf tl" "tegels tl" "vraag tl";grid-template-rows:auto auto 1fr;gap:18px;align-items:start}
+}
+/* Vraagblok in Hamerslag-oranje */
+.card.vraag{background:var(--iris);border:0;color:#fff}
+.vr-kop{margin-bottom:10px}.vr-kop b{display:block;font-family:var(--head);font-size:17px}.vr-kop span{font-size:12.5px;opacity:.9}
+.card.vraag .vr-in{background:#fff;border-color:transparent}
+.card.vraag .vr-in button{background:#1B0A3A}
+.card.vraag .vr-chips button{background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.35);color:#fff}
+.card.vraag .vr-voet{color:rgba(255,255,255,.9) !important}
+.card.vraag .vr-open{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.3);color:#fff}.card.vraag .vr-open .mut{color:rgba(255,255,255,.85)}
+/* Uur voor uur: oudere uren ingeklapt */
+.tl-ouder{display:flex;justify-content:space-between;align-items:center;width:100%;margin:2px 0 12px;padding:10px 12px;border-radius:12px;border:1px dashed var(--line2);background:var(--soft);font:700 13px Inter,system-ui,sans-serif;color:var(--tx);cursor:pointer}
+.tl-ouder span{font-weight:500;font-size:12px;color:var(--mut)}

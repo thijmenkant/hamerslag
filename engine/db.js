@@ -61,7 +61,7 @@ function supabaseDb(base, key) {
     rondesMetVoorstel: () => req('GET', 'rounds?select=*&status=eq.klaar&proposal=not.is.null&order=id.asc'),
     berichtenVan: (roundId, fase) => req('GET', `messages?select=*&round_id=eq.${roundId}${fase ? `&phase=eq.${fase}` : ''}&order=seq.asc`),
     insertTrade: row => insert('trades', [row]),
-    insertSnapshot: row => insert('snapshots', [row]),
+    insertSnapshot: row => upsert('snapshots', [row], 't'),   // zelfde tijdstip (uurcheck + zitting) = laatste wint
     insertHeadlines: rows => rows.length ? upsert('headlines', rows, 'url') : [],
     bekendeUrls: async urls => { if (!urls.length) return new Set(); const lijst = urls.map(u => `"${u.replace(/"/g, '')}"`).join(','); return new Set((await req('GET', `headlines?select=url&url=in.(${encodeURIComponent(lijst)})`)).map(r => r.url)); },
     laatsteRondes: () => req('GET', 'rounds?select=id,started_at,spoed,status&order=id.desc&limit=30'),
@@ -95,7 +95,7 @@ export function geheugenDb() {
     rondesMetVoorstel: async () => d.rounds.filter(r => r.status === 'klaar' && r.proposal),
     berichtenVan: async (roundId, fase) => d.messages.filter(m => m.round_id === roundId && (!fase || m.phase === fase)),
     insertTrade: async row => { d.trades.push(row); },
-    insertSnapshot: async row => { d.snapshots.push(row); },
+    insertSnapshot: async row => { const i = d.snapshots.findIndex(x => x.t === row.t); i >= 0 ? (d.snapshots[i] = row) : d.snapshots.push(row); },
     insertHeadlines: async rows => { d.headlines.push(...rows); },
     bekendeUrls: async urls => new Set(d.headlines.map(h => h.url).filter(u => urls.includes(u))),
     laatsteRondes: async () => d.rounds.slice(-30).reverse(),

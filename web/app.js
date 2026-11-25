@@ -280,6 +280,7 @@ function vraagKaart() {
   const over = Math.max(0, 5 - recent);
   const STATUS = { wacht: 'start binnen 5 minuten', gestart: 'zitting is bezig' };
   return `<div class="card vraag"><div class="card-b">
+    <div class="vr-kop"><b>Start een zitting</b><span>Leg een vraag voor aan de zaal</span></div>
     <form class="vr-in" id="vraagForm"><input id="vraagIn" maxlength="300" placeholder="Moeten we in goud investeren?" aria-label="Vraag aan de zaal" autocomplete="off"><button type="submit" ${vraagBezig ? 'disabled' : ''}>${vraagBezig ? 'Versturen…' : 'Start zitting'}</button></form>
     <div class="vr-chips">${[['Goud', 'Moeten we in goud investeren?'], ['Bitcoin', 'Is dit een goed moment voor Bitcoin?'], ['Nvidia', 'Moeten we Nvidia kopen?'], ['Iets verkopen?', 'Moeten we iets verkopen?']].map(([l, q]) => `<button type="button" data-vraagvoorbeeld="${esc(q)}">${l}</button>`).join('')}</div>
     ${open.map(v => `<div class="vr-open"><span class="dot ${v.status === 'gestart' ? 'red' : ''}"></span><b>${esc(v.vraag)}</b><span class="mut">${esc(v.status === 'wacht' && v.reden ? v.reden : STATUS[v.status])}</span></div>`).join('')}
@@ -348,7 +349,7 @@ function voorzittingenKaart() {
 }
 
 // ---------- UUR VOOR UUR: elke uurcheck, voorzitting en zitting op een tijdlijn ----------
-let tlDag = 0; const tlOpen = new Set();
+let tlDag = 0, tlOuder = false; const tlOpen = new Set();
 const twee = n => String(n).padStart(2, '0');
 // Kleuren: groen = gekocht/verkocht, rood = afgewezen, oranje = zitting gestart, geel = voorzitting zonder zitting, grijs = rustig/niets
 const tlKleurZit = r => r.status === 'bezig' ? 'live' : r.outcome === 'UITGEVOERD' ? 'groen' : r.outcome === 'AFGEWEZEN' ? 'rood' : 'grijs';
@@ -390,13 +391,17 @@ function tijdlijnKaart() {
   for (const it of items) { const u = new Date(it.t).getHours(); if (!perUur.has(u)) perUur.set(u, []); perUur.get(u).push(it); }
   const uren = [...perUur.keys()];
   const hoogste = tlDag === 0 ? new Date().getHours() : Math.max(...uren, 0), laagste = uren.length ? Math.min(...uren) : hoogste;
-  let html = '';
+  let html = '', ouder = '', nOuder = { zit: 0, chk: 0, uren: 0 };
+  const grens = tlDag === 0 ? hoogste - 2 : -1;   // vandaag: het huidige uur en de 2 uur ervoor open
   for (let u = hoogste; u >= laagste; u--) {
     const lijst = (perUur.get(u) || []).sort((a, b) => new Date(b.t) - new Date(a.t));
     const nu = tlDag === 0 && u === new Date().getHours();
     const kleur = lijst.map(it => it.r ? tlKleurZit(it.r) : tlKleurVz(it.v)).sort((a, b) => KLEURRANG.indexOf(a) - KLEURRANG.indexOf(b))[0] || 'leeg';
-    html += `<div class="tl-uur ${lijst.length ? '' : 'leeg'} u-${kleur}"><div class="tl-label"><b>${twee(u)}:00</b>${nu ? '<span>nu</span>' : ''}</div><div class="tl-items">${lijst.map(it => it.r ? tlZitting(it.r, it.r === nieuwsteZit) : it.html()).join('') || `<div class="tl-geen">${nu ? 'Check volgt om ' + twee(volgendeRonde().getHours()) + ':00' : 'Geen check gedraaid'}</div>`}</div></div>`;
+    const blok = `<div class="tl-uur ${lijst.length ? '' : 'leeg'} u-${kleur}"><div class="tl-label"><b>${twee(u)}:00</b>${nu ? '<span>nu</span>' : ''}</div><div class="tl-items">${lijst.map(it => it.r ? tlZitting(it.r, it.r === nieuwsteZit) : it.html()).join('') || `<div class="tl-geen">${nu ? 'Check volgt om ' + twee(volgendeRonde().getHours()) + ':00' : 'Geen check gedraaid'}</div>`}</div></div>`;
+    if (u >= grens) html += blok;
+    else { ouder += blok; nOuder.uren++; nOuder.zit += lijst.filter(it => it.r).length; nOuder.chk += lijst.filter(it => !it.r).length; }
   }
+  if (ouder) html += `<button type="button" class="tl-ouder" data-tlouder>${tlOuder ? '▴ Inklappen' : `▾ Eerder vandaag · ${nOuder.uren} uur`}<span>${nOuder.zit} zitting${nOuder.zit === 1 ? '' : 'en'} · ${nOuder.chk} check${nOuder.chk === 1 ? '' : 's'}</span></button>${tlOuder ? ouder : ''}`;
   const z = rondes.filter(r => r.status === 'klaar').length, c = vzs.filter(v => v.besluit !== 'OVERGESLAGEN').length;
   return `<div class="card tijdlijn"><div class="card-h"><h2>Uur voor uur</h2><div class="lg-filter">
       <button type="button" data-tldag="1" class="${tlDag === 1 ? 'on' : ''}">Gisteren</button><button type="button" data-tldag="0" class="${tlDag === 0 ? 'on' : ''}">Vandaag</button></div></div>
@@ -416,13 +421,12 @@ function renderHome() {
   ${welkomKaart()}
   <div id="liveKaart"></div>
   <div id="meldBalk">${meldingenKaart(true)}</div>
-  <div class="home-grid"><div class="home-kol">
-  ${pfKaart()}
-  <div class="alleen-pc">${tegelsKaart(r, vz)}</div>
-  <div id="vraagVak">${vraagKaart()}</div>
-  </div><div class="home-kol">
-  <div id="tijdlijn">${tijdlijnKaart()}</div>
-  </div></div>
+  <div class="home-grid">
+  <div class="hg-pf">${pfKaart()}</div>
+  <div class="hg-tegels alleen-pc">${tegelsKaart(r, vz)}</div>
+  <div class="hg-tl" id="tijdlijn">${tijdlijnKaart()}</div>
+  <div class="hg-vraag" id="vraagVak">${vraagKaart()}</div>
+  </div>
   <div class="card"><div class="card-h"><h2>De zaal <span class="pill" id="livePill" style="padding:3px 8px;font-size:10px"><span class="dot red"></span>LIVE</span></h2><span class="mut" id="miniFase" style="font-size:12px"></span></div>
     <div id="aanleidingBalk"></div>
     <div class="zaal-mini" id="zaalMini"></div>
@@ -860,6 +864,7 @@ document.addEventListener('click', e => {
   if (so && !e.target.closest('a.kijk')) { statusOpen = !statusOpen; toonLive(speler.s); return; }
   const to = e.target.closest('[data-tlopen]');
   if (to) { const k = to.dataset.tlopen; tlOpen.has(k) ? tlOpen.delete(k) : tlOpen.add(k); tekenTijdlijn(); return; }
+  if (e.target.closest('[data-tlouder]')) { tlOuder = !tlOuder; tekenTijdlijn(); return; }
   const td = e.target.closest('[data-tldag]');
   if (td) { tlDag = Number(td.dataset.tldag); tekenTijdlijn(); return; }
   const vv = e.target.closest('[data-vraagvoorbeeld]');
