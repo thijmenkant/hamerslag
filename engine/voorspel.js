@@ -26,7 +26,7 @@ export function beursAgenda(nu, dagen = 7) {   // feestdagen, korte dagen en ren
 }
 
 export function voorspelPrompt({ nu, markt, koppen, agenda, macro, angst, lessen = [] }) {
-  const regel = m => `${m.symbol} (${m.name}, ${m.kind}): prijs ${Number(m.price).toFixed(2)} · 24u ${m.chg24h != null ? (m.chg24h * 100).toFixed(1) + '%' : '?'} · 7d ${m.chg7d != null ? (m.chg7d * 100).toFixed(1) + '%' : '?'}${m.rsi != null ? ` · RSI ${Math.round(m.rsi)}` : ''}${m.trend ? ` · trend ${m.trend}` : ''}`;
+  const regel = m => `${m.symbol} (${m.name}, ${m.kind}): prijs ${Number(m.price).toFixed(2)} · 24u ${m.chg24h != null ? (m.chg24h * 100).toFixed(1) + '%' : '?'} · 7d ${m.chg7d != null ? (m.chg7d * 100).toFixed(1) + '%' : '?'}${m.rsi != null ? ` · uur-RSI ${Math.round(m.rsi)}` : ''}${m.trend ? ` · uurtrend ${m.trend}` : ''}`;
   return `Je bent het onderzoeksteam van Hamerslag (10 AI-traders, nepgeld). Het is ${nu.toLocaleString('nl-NL', { timeZone: 'Europe/Amsterdam', dateStyle: 'full', timeStyle: 'short' })}.
 Maak de DAGVOORSPELLING: kijk 1 tot 7 dagen vooruit. Je handelt NIET, je voorspelt alleen; later meten we of je gelijk had.
 
@@ -59,7 +59,9 @@ Wees eerlijk en bescheiden: markten zijn moeilijk te voorspellen. Een kans van 5
 ${lessen.length ? `LESSEN VAN EERDER (jouw voorspellingen die al zijn nagekeken; leer van je fouten, herhaal ze niet):
 ${lessen.map(l => `- ${l.asset} ${l.richting} ${l.kans}%: ${l.uitkomst === 'goed' ? 'GOED' : 'FOUT'} (werkelijk ${(Number(l.verandering) * 100).toFixed(1)}%). Reden was: ${String(l.reden || '').slice(0, 140)}`).join('\n')}
 
-` : ''}KOERSEN (euro voor crypto, aandelen/ETF's in euro omgerekend):
+` : ''}LET OP: uur-RSI en uurtrend gaan over de laatste ± 14 uur, niet over dagen. Een uur-RSI van 0 of 100 betekent alleen dat de koers een paar uur dezelfde kant op ging (of stil stond omdat de beurs dicht was); het is GEEN bewijs dat iets oververkocht is of gaat herstellen. Leun er niet op en zet niet al je voorspellingen op dezelfde gok (bijvoorbeeld overal herstel).
+
+KOERSEN (euro voor crypto, aandelen/ETF's in euro omgerekend):
 ${markt.map(regel).join('\n')}
 
 NIEUWS VAN DE AFGELOPEN 24 UUR:
