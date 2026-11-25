@@ -196,3 +196,29 @@ drop policy if exists "meldingen lezen" on push_abonnementen;
 create policy "meldingen lezen" on push_abonnementen for select to authenticated using (true);
 grant select, insert, delete on push_abonnementen to authenticated;
 grant all on push_abonnementen to service_role;
+
+-- Dagvoorspelling: elke middag kijken de traders 1-7 dagen vooruit (alleen voorspellen, niet handelen).
+create table if not exists dagvoorspelling (
+  datum date primary key,
+  t timestamptz default now(),
+  stemming text,
+  agenda jsonb,
+  themas jsonb,
+  vooruit jsonb
+);
+create table if not exists voorspellingen (
+  id bigserial primary key,
+  datum date, t timestamptz default now(),
+  asset text, naam text, richting text check (richting in ('OP','NEER','GELIJK')), kans int,
+  reden text, bronnen jsonb, thema text, keten jsonb, vooruit boolean default false, startprijs numeric, marge numeric, tot timestamptz,
+  uitkomst text check (uitkomst in ('goed','fout')), eindprijs numeric, verandering numeric, beoordeeld_at timestamptz
+);
+alter table dagvoorspelling enable row level security;
+alter table voorspellingen enable row level security;
+drop policy if exists "dagvoorspelling lezen" on dagvoorspelling;
+create policy "dagvoorspelling lezen" on dagvoorspelling for select to authenticated using (true);
+drop policy if exists "voorspellingen lezen" on voorspellingen;
+create policy "voorspellingen lezen" on voorspellingen for select to authenticated using (true);
+grant select on dagvoorspelling, voorspellingen to authenticated;
+grant all on dagvoorspelling, voorspellingen to service_role;
+grant usage, select on all sequences in schema public to service_role;

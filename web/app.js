@@ -869,6 +869,7 @@ document.addEventListener('click', e => {
   if (td) { tlDag = Number(td.dataset.tldag); tekenTijdlijn(); return; }
   const vv = e.target.closest('[data-vraagvoorbeeld]');
   if (vv) { const i = $('#vraagIn'); if (i) { i.value = vv.dataset.vraagvoorbeeld; i.focus(); } return; }
+  if (e.target.closest('[data-vsoud]')) { vsOud = !vsOud; renderVoorspel(); return; }
   const lb = e.target.closest('[data-logboek]');
   if (lb) { logboekOpen = lb.dataset.logboek === 'open'; const el = $('#logboek'); if (el) el.innerHTML = voorzittingenKaart(); if (logboekOpen) el?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
   const lf = e.target.closest('[data-logf]');
@@ -887,17 +888,94 @@ document.querySelectorAll('[data-cam]').forEach(b => b.onclick = () => { zaal?.c
 // ---------- router ----------
 function route() {
   const h = (location.hash || '#home').slice(1);
-  const tab = ['home', 'markt', 'zaal', 'portefeuille', 'traders', 'bronnen'].includes(h) ? h : 'home';
+  const tab = ['home', 'markt', 'zaal', 'portefeuille', 'traders', 'voorspel', 'bronnen'].includes(h) ? h : 'home';
   document.querySelectorAll('nav.tabs a').forEach(a => a.classList.toggle('on', a.dataset.tab === tab));
   if (tab === 'zaal') { openZaal(); return; }
   sluitZaal();
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + tab));
-  if (tab === 'home') renderHome(); else if (tab === 'markt') renderMarktView(); else if (tab === 'portefeuille') renderPortefeuille(); else if (tab === 'bronnen') renderBronnen(); else renderTraders();
+  if (tab === 'home') renderHome(); else if (tab === 'markt') renderMarktView(); else if (tab === 'portefeuille') renderPortefeuille(); else if (tab === 'bronnen') renderBronnen(); else if (tab === 'voorspel') renderVoorspel(); else renderTraders();
 }
 addEventListener('hashchange', route);
 let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { const h = location.hash.slice(1) || 'home'; if (h === 'home') renderHome(); if (h === 'portefeuille') tekenPf(); }, 150); });
 
 // ---------- BRONNEN ----------
+
+// ---------- VOORSPEL: dagvoorspelling, wereldthema's, agenda en scorebord ----------
+let vsOud = false;
+const RICHT = { OP: ['op', 'stijgt', '▲'], NEER: ['neer', 'zakt', '▼'], GELIJK: ['zij', 'blijft ongeveer gelijk', '◆'] };
+const dagNaam = iso => new Date(iso + 'T12:00:00Z').toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' });
+const ketenHtml = (k, pijl = '→') => k.map((x, i) => `${i ? `<i>${pijl}</i>` : ''}<span>${esc(x)}</span>`).join('');
+const tkChips = (w, v) => [...(w || []).map(x => `<span class="tk w">▲ ${esc(x)}</span>`), ...(v || []).map(x => `<span class="tk v">▼ ${esc(x)}</span>`)].join('');
+const ketenTekst = k => (k || []).map(esc).join(' <i>→</i> ');
+function themaKaart(t) {
+  return `<details class="thema"><summary><b>${esc(t.onderwerp)}</b><span>${esc(t.effect)}</span>${(t.winnaars?.length || t.verliezers?.length) ? `<div class="tks">${tkChips(t.winnaars, t.verliezers)}</div>` : ''}</summary>
+    ${t.keten?.length ? `<div class="sc-k">${ketenTekst(t.keten)}</div>` : ''}
+    ${t.ingeprijsd || t.tegen ? `<div class="th-check">${t.ingeprijsd ? `<div><em>Al in de koers?</em> ${esc(t.ingeprijsd)}</div>` : ''}${t.tegen ? `<div><em>Wat kan het breken?</em> ${esc(t.tegen)}</div>` : ''}</div>` : ''}
+  </details>`;
+}
+function vooruitKaart(f) {
+  return `<details class="vr"><summary>
+    <div class="vr-kop"><span class="vr-soort ${f.soort}">${f.soort === 'signaal' ? 'Signaal' : f.datum ? dagNaam(f.datum) : 'Agenda'}</span><b>${esc(f.gebeurtenis)}</b></div>
+    <div class="vr-balk">${f.scenarios.map((c, i) => `<i class="s${i}" style="flex:${Math.max(c.kans, 12)}">${c.kans}%</i>`).join('')}</div>
+    <div class="vr-leg">${f.scenarios.map((c, i) => `<span class="s${i}">${esc(c.als)}</span>`).join('')}</div></summary>
+    ${f.verwachting ? `<div class="vr-verw"><em>Markt verwacht:</em> ${esc(f.verwachting)}</div>` : ''}
+    <div class="vr-sc">${f.scenarios.map((c, i) => `<div class="sc s${i}"><b>${esc(c.als)} <span>${c.kans}%</span></b><div class="sc-k">${ketenTekst(c.keten)}</div>${(c.winnaars?.length || c.verliezers?.length) ? `<div class="tks">${tkChips(c.winnaars, c.verliezers)}</div>` : ''}</div>`).join('')}</div>
+    ${f.vooraf ? `<div class="vr-verw"><em>Beweegt al vooraf:</em> ${esc(f.vooraf)}</div>` : ''}
+  </details>`;
+}
+function voorspelKaart(v) {
+  const [kl, wat, pijl] = RICHT[v.richting] || RICHT.GELIJK;
+  const m = (D.market || []).find(x => x.symbol === v.asset), nu = m ? Number(m.price) : null;
+  const delta = v.uitkomst ? Number(v.verandering) : nu && v.startprijs ? nu / Number(v.startprijs) - 1 : null;
+  const [bg, fg] = kleurVan(v.asset);
+  const status = v.uitkomst === 'goed' ? '<span class="vs-uit goed">✓ Uitgekomen</span>' : v.uitkomst === 'fout' ? '<span class="vs-uit fout">✗ Niet uitgekomen</span>'
+    : `<span class="vs-uit loopt">Loopt tot ${new Date(v.tot).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric' })} ${tijd(v.tot)}</span>`;
+  return `<div class="vs ${kl} ${v.uitkomst || ''}">
+    ${v.vooruit ? `<span class="vs-voor">⏩ Vóór de gebeurtenis · ${esc(String(v.thema || '').replace(/^Vooruit: /, ''))}</span>` : ''}
+    <div class="vs-r"><div class="ico" style="background:${bg};color:${fg}">${esc(v.asset)}</div><div class="vs-wat"><b>${esc(v.naam || v.asset)} ${wat}</b>${status}</div><div class="kans"><b>${v.kans}%</b><span>kans</span></div></div>
+    <div class="balk"><i style="width:${v.kans}%"></i></div>
+    ${v.keten?.length ? `<div class="sc-k">${ketenTekst(v.keten)}</div>` : ''}
+    <p>${esc(v.reden)}</p>
+    <div class="vs-voet"><div class="bron">${(v.bronnen || []).map(b => `<span>${esc(b)}</span>`).join('')}</div>${delta != null ? `<span class="vs-nu ${delta >= 0 ? 'up' : 'dn'}">${v.uitkomst ? 'eind' : 'nu'} ${delta >= 0 ? '+' : ''}${(delta * 100).toFixed(1).replace('.', ',')}%</span>` : ''}</div>
+  </div>`;
+}
+function renderVoorspel() {
+  const dagen = D.dagen || [], alle = D.voorspellingen || [];
+  const vandaagNL = new Date(Date.now() + 3600e3).toISOString().slice(0, 10);
+  const dag = dagen[0], vanDag = dag ? alle.filter(v => v.datum === dag.datum) : [];
+  const klaar = alle.filter(v => v.uitkomst), goed = klaar.filter(v => v.uitkomst === 'goed').length;
+  const trefkans = klaar.length ? goed / klaar.length : null, gemKans = klaar.length ? klaar.reduce((a, v) => a + v.kans, 0) / klaar.length / 100 : null;
+  const ouder = alle.filter(v => !dag || v.datum !== dag.datum);
+  const perDag = [...new Set(ouder.map(v => v.datum))];
+  const scoreHtml = `  <div class="card"><div class="card-h"><h2>Scorebord</h2><span class="mut" style="font-size:12px">${klaar.length} nagekeken</span></div><div class="card-b">
+    ${klaar.length ? `<div class="score"><div><b>${goed}/${klaar.length}</b><span>uitgekomen</span></div><div><b>${Math.round(trefkans * 100)}%</b><span>trefkans</span></div><div><b>${Math.round(gemKans * 100)}%</b><span>zeiden ze</span></div></div>
+      <p class="mut vs-oordeel">${trefkans >= gemKans - 0.03 ? (trefkans > 0.55 ? 'De traders zitten vaker goed dan een gok, en ongeveer zo vaak als ze zelf zeiden.' : 'Zo vaak goed als ze zeiden, maar nog niet beter dan kop of munt.') : 'De traders zijn zekerder dan terecht: ze zitten minder vaak goed dan ze zelf denken.'} ${klaar.length < 20 ? 'Na een paar weken zegt dit pas echt iets.' : ''}</p>`
+    : '<p class="mut" style="font-size:13px">Zodra de eerste voorspellingen verlopen, zie je hier hoe vaak de traders gelijk hadden.</p>'}
+  </div></div>`;
+  const eerderHtml = `  ${perDag.length ? `<div class="card"><button type="button" class="tl-ouder" data-vsoud style="margin:12px 16px;width:calc(100% - 32px)">${vsOud ? '▴ Inklappen' : `▾ Eerdere voorspellingen · ${perDag.length} dag${perDag.length === 1 ? '' : 'en'}`}<span>${ouder.filter(v => v.uitkomst === 'goed').length} van ${ouder.filter(v => v.uitkomst).length} uitgekomen</span></button>
+    ${vsOud ? `<div class="card-b vs-blok" style="padding-top:0">${perDag.map(d => `<span class="eyebrow">${dagNaam(d)}</span>${ouder.filter(v => v.datum === d).map(voorspelKaart).join('')}`).join('')}</div>` : ''}</div>` : ''}`;
+  $('#v-voorspel').innerHTML = `
+  <h2 class="pagetitle">Voorspel</h2>
+  <div class="vs-pagina">
+  <div class="vs-kol">
+  <div class="card"><div class="card-b vs-blok">
+    <div class="dv-kop"><div><h2>Dagvoorspelling</h2><small>${dag ? `${dagNaam(dag.datum)} · gemaakt om ${tijd(dag.t)} · voor de komende 1 tot 7 dagen` : 'Nog geen voorspelling'}</small></div>${dag && dag.datum !== vandaagNL ? '<span class="vb">VAN GISTEREN</span>' : ''}</div>
+    ${!dag || dag.datum !== vandaagNL ? `<div class="vs-wacht">De voorspelling van vandaag komt na 14:00, vóór de Amerikaanse beurs opengaat.</div>` : ''}
+    ${dag?.stemming ? `<div class="stem"><span style="font-size:20px">🌤️</span><span><b>Stemming:</b> ${esc(dag.stemming)}</span></div>` : ''}
+    ${vanDag.map(voorspelKaart).join('')}
+  </div></div>
+  ${scoreHtml}
+  ${eerderHtml}
+  </div>
+  <div class="vs-kol">
+  ${dag?.vooruit?.length || dag?.agenda?.length ? `<div class="card"><div class="card-h"><h2>Wat komt eraan</h2><span class="mut" style="font-size:12px">tik voor de scenario's</span></div><div class="card-b vs-themas">${(dag.vooruit || []).map(vooruitKaart).join('')}
+    ${dag.agenda?.length ? `<div class="ag kort">${dag.agenda.map(a => `<div><b>${dagNaam(a.datum)}</b><span>${esc(a.tekst)}</span></div>`).join('')}</div>` : ''}</div></div>` : ''}
+  ${dag?.themas?.length ? `<div class="card"><div class="card-h"><h2>Wat speelt er in de wereld</h2><span class="mut" style="font-size:12px">tik voor de keten</span></div><div class="card-b vs-themas">${dag.themas.map(themaKaart).join('')}</div></div>` : ''}
+  </div>
+  <p class="mut vs-noot">Alleen voorspellen, niet handelen: zo meten we eerst of het iets oplevert. Kosten: één slimme AI-vraag per dag, ± 5 cent.</p>
+  </div>`;
+}
+
 // Alle bronnen van Hamerslag, met een lampje: werkt hij nu? De motor schrijft na elke check per bron
 // in state.bronStatus: { [id]: { ok, t, melding, aantal } }.
 const BRONNEN_LIJST = [

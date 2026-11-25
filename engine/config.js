@@ -192,9 +192,26 @@ export const SPOED = {
 };
 
 // Amerikaanse beurs ongeveer open (UTC). Aan de voorzichtige kant: bij twijfel dicht.
+// Amerikaanse beursdagen: dicht op feestdagen, eerder dicht (13:00 New Yorkse tijd) op een paar dagen
+export const BEURS_DICHT = {
+  '2026-01-01': 'Nieuwjaar', '2026-01-19': 'Martin Luther King Day', '2026-02-16': 'Presidents Day', '2026-04-03': 'Goede Vrijdag',
+  '2026-05-25': 'Memorial Day', '2026-06-19': 'Juneteenth', '2026-07-03': 'Onafhankelijkheidsdag', '2026-09-07': 'Labor Day',
+  '2026-11-26': 'Thanksgiving', '2026-12-25': 'Kerst',
+  '2027-01-01': 'Nieuwjaar', '2027-01-18': 'Martin Luther King Day', '2027-02-15': 'Presidents Day', '2027-03-26': 'Goede Vrijdag',
+  '2027-05-31': 'Memorial Day', '2027-06-18': 'Juneteenth', '2027-07-05': 'Onafhankelijkheidsdag', '2027-09-06': 'Labor Day',
+  '2027-11-25': 'Thanksgiving', '2027-12-24': 'Kerst',
+};
+export const BEURS_KORT = { '2026-11-27': 'dag na Thanksgiving', '2026-12-24': 'kerstavond', '2027-11-26': 'dag na Thanksgiving' };
+// Openingstijden in UTC; klopt in de winter (zomertijd VS/EU ligt een paar weken anders, dan schuift het een uur)
+// Rentebesluiten van de Amerikaanse centrale bank (Fed), bron: federalreserve.gov (2027 herzien op 12 nov 2026).
+// Datum = de dag van het besluit (20:00 Nederlandse tijd). Oktober 2027 is een overleg zonder besluit.
+export const RENTEBESLUIT = { '2026-12-09': 'Fed', '2027-01-27': 'Fed', '2027-03-17': 'Fed', '2027-04-28': 'Fed', '2027-06-09': 'Fed', '2027-07-28': 'Fed', '2027-09-15': 'Fed', '2027-11-17': 'Fed' };
+
 export function beursOpen(d = new Date()) {
   const dag = d.getUTCDay();
   if (dag === 0 || dag === 6) return false;
+  const datum = d.toISOString().slice(0, 10);
+  if (BEURS_DICHT[datum]) return false;
   const m = d.getUTCHours() * 60 + d.getUTCMinutes();
-  return m >= 14 * 60 + 30 && m <= 20 * 60 + 55;
+  return m >= 14 * 60 + 30 && m <= (BEURS_KORT[datum] ? 17 * 60 + 55 : 20 * 60 + 55);
 }

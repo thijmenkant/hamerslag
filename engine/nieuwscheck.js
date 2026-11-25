@@ -56,6 +56,8 @@ export async function nieuwscheck({ db = maakDb(), nieuws = () => fetchNews({ ma
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const { zittingscheck } = await import('./zittingscheck.js');
+  // Dagvoorspelling: één keer per dag na 14:00 (en verlopen voorspellingen nakijken)
+  try { const { dagvoorspelling } = await import('./voorspel.js'); const llm = await import('./llm.js'); const { maakDb } = await import('./db.js'); const r = await dagvoorspelling({ db: maakDb(), llm }); if (r.gemaakt) console.log(`dagvoorspelling gemaakt: ${r.voorspellingen.length}`); } catch (e) { console.log('⚠ dagvoorspelling mislukt:', e.message); }
   // Elke 5 minuten: verse prijzen voor crypto en wat je bezit (zodat de app live meeloopt)
   try { const { verversPrijzen } = await import('./markt.js'); const { maakDb } = await import('./db.js'); const n = await verversPrijzen(maakDb()); console.log(`prijzen bijgewerkt: ${n}`); } catch (e) { console.log('⚠ prijzen bijwerken mislukt:', e.message); }
   nieuwscheck({ inhalen: o => zittingscheck({ ...o, forceer: false, inhaal: true }) }).catch(e => { console.error('Nieuwscheck mislukt:', e.message); process.exit(1); });

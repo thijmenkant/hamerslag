@@ -68,6 +68,13 @@ function supabaseDb(base, key) {
     insertVoorzitting: row => insert('voorzittingen', [row]),
     pushAbonnementen: () => req('GET', 'push_abonnementen?select=endpoint,p256dh,auth'),
     verwijderAbonnement: endpoint => req('DELETE', `push_abonnementen?endpoint=eq.${encodeURIComponent(endpoint)}`, undefined, 'return=minimal'),
+    recenteKoppen: sinds => req('GET', `headlines?select=title,publisher,published_at&published_at=gte.${encodeURIComponent(sinds)}&order=importance.desc,published_at.desc&limit=60`),
+    heeftDagvoorspelling: async datum => (await req('GET', `dagvoorspelling?select=datum&datum=eq.${datum}`)).length > 0,
+    insertDagvoorspelling: row => insert('dagvoorspelling', [row]),
+    insertVoorspellingen: rows => insert('voorspellingen', rows),
+    openVoorspellingen: () => req('GET', 'voorspellingen?select=*&uitkomst=is.null'),
+    nagekekenVoorspellingen: sinds => req('GET', `voorspellingen?select=asset,richting,kans,reden,uitkomst,verandering&uitkomst=not.is.null&beoordeeld_at=gte.${encodeURIComponent(sinds)}&order=beoordeeld_at.desc&limit=20`),
+    updateVoorspelling: (id, patch) => req('PATCH', `voorspellingen?id=eq.${id}`, patch, 'return=minimal'),
     zetLive: data => upsert('live', [{ id: 1, data, updated_at: new Date().toISOString() }], 'id'),
     wachtendeVragen: () => req('GET', 'verzoeken?select=*&status=eq.wacht&order=id.asc&limit=5'),
     vragenGestartSinds: async t => (await req('GET', `verzoeken?select=id,uitkomst&status=in.(gestart,klaar)&behandeld_at=gte.${encodeURIComponent(t)}`)).filter(v => v.uitkomst !== 'GEEN VOORSTEL').length,   // mislukte of lege zittingen tellen niet mee
@@ -76,7 +83,7 @@ function supabaseDb(base, key) {
 }
 
 export function geheugenDb() {
-  const d = { state: null, traders: [], market: [], rounds: [], sources: [], messages: [], trades: [], snapshots: [], headlines: [], voorzittingen: [], verzoeken: [], live: null, liveLog: [] };
+  const d = { state: null, traders: [], market: [], rounds: [], sources: [], messages: [], trades: [], snapshots: [], headlines: [], voorzittingen: [], verzoeken: [], live: null, liveLog: [], dagvoorspelling: [], voorspellingen: [] };
   let rid = 0;
   return {
     soort: 'geheugen', data: d,
@@ -102,6 +109,13 @@ export function geheugenDb() {
     insertVoorzitting: async row => { d.voorzittingen.push(row); },
     pushAbonnementen: async () => d.push || [],
     verwijderAbonnement: async endpoint => { d.push = (d.push || []).filter(a => a.endpoint !== endpoint); },
+    recenteKoppen: async sinds => d.headlines.filter(h => !h.published_at || h.published_at >= sinds),
+    heeftDagvoorspelling: async datum => d.dagvoorspelling.some(x => x.datum === datum),
+    insertDagvoorspelling: async row => { d.dagvoorspelling.push(row); },
+    insertVoorspellingen: async rows => { for (const r of rows) d.voorspellingen.push({ id: d.voorspellingen.length + 1, uitkomst: null, ...r }); },
+    openVoorspellingen: async () => d.voorspellingen.filter(v => !v.uitkomst),
+    nagekekenVoorspellingen: async sinds => d.voorspellingen.filter(v => v.uitkomst && (v.beoordeeld_at || '') >= sinds),
+    updateVoorspelling: async (id, patch) => { Object.assign(d.voorspellingen.find(v => v.id === id), patch); },
     zetLive: async data => { d.live = data && structuredClone(data); d.liveLog.push(data && (data.fase + (data.bronnenKlaar ? '+bronnen' : ''))); },
     wachtendeVragen: async () => d.verzoeken.filter(v => v.status === 'wacht').sort((a, b) => a.id - b.id),
     vragenGestartSinds: async t => d.verzoeken.filter(v => ['gestart', 'klaar'].includes(v.status) && v.uitkomst !== 'GEEN VOORSTEL' && v.behandeld_at >= t).length,

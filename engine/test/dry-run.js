@@ -171,7 +171,7 @@ d.state.kosten.eur = 0; d.state.kosten.gestopt = false; d.state.kosten.gemeld70 
   assert.ok(d.state.positions.ETH.qty > ethVoor, 'staking: ETH groeit');
   // Geld uit de pot: alleen met uitPot, cash blijft gelijk
   const st = { cash: 500, pot: 80, positions: {} }, pr = { AAPL: 249.1 };
-  const r = voerUit({ actie: 'KOOP', asset: 'AAPL', bedrag: 25, uitPot: true }, st, pr, tDiv);
+  const r = voerUit({ actie: 'KOOP', asset: 'AAPL', bedrag: 25, uitPot: true }, st, pr, nu);   // tDiv valt na de vroege sluiting op de vrijdag na Thanksgiving
   assert.ok(r.ok && st.cash === 500 && st.pot === 30, 'kopen uit de dividendpot');
   assert.ok(r.opgehoogd && r.bedrag === 50, 'aandeel onder €50 wordt automatisch opgehoogd naar €50');
   assert.equal(r.fee, Math.round((50 * 0.0035 + 1) * 100) / 100, 'aandeel: €1 vast + 0,35%');
