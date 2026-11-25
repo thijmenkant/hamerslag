@@ -210,7 +210,7 @@ create table if not exists voorspellingen (
   id bigserial primary key,
   datum date, t timestamptz default now(),
   asset text, naam text, richting text check (richting in ('OP','NEER','GELIJK')), kans int,
-  reden text, bronnen jsonb, thema text, keten jsonb, vooruit boolean default false, startprijs numeric, marge numeric, tot timestamptz,
+  reden text, bronnen jsonb, thema text, keten jsonb, vooruit boolean default false, basiskans int, startprijs numeric, marge numeric, tot timestamptz,
   uitkomst text check (uitkomst in ('goed','fout')), eindprijs numeric, verandering numeric, beoordeeld_at timestamptz
 );
 alter table dagvoorspelling enable row level security;
@@ -222,3 +222,6 @@ create policy "voorspellingen lezen" on voorspellingen for select to authenticat
 grant select on dagvoorspelling, voorspellingen to authenticated;
 grant all on dagvoorspelling, voorspellingen to service_role;
 grant usage, select on all sequences in schema public to service_role;
+
+-- Basiskans (hoe vaak ging het het afgelopen jaar zo, over dezelfde termijn) per voorspelling.
+alter table voorspellingen add column if not exists basiskans int;

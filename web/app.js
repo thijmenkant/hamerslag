@@ -919,6 +919,7 @@ function vooruitKaart(f) {
     <div class="vr-balk">${f.scenarios.map((c, i) => `<i class="s${i}" style="flex:${Math.max(c.kans, 12)}">${c.kans}%</i>`).join('')}</div>
     <div class="vr-leg">${f.scenarios.map((c, i) => `<span class="s${i}">${esc(c.als)}</span>`).join('')}</div></summary>
     ${f.verwachting ? `<div class="vr-verw"><em>Markt verwacht:</em> ${esc(f.verwachting)}</div>` : ''}
+    ${f.wedmarkt ? `<div class="vr-verw"><em>Polymarket:</em> ${esc(f.wedmarkt)}</div>` : ''}
     <div class="vr-sc">${f.scenarios.map((c, i) => `<div class="sc s${i}"><b>${esc(c.als)} <span>${c.kans}%</span></b><div class="sc-k">${ketenTekst(c.keten)}</div>${(c.winnaars?.length || c.verliezers?.length) ? `<div class="tks">${tkChips(c.winnaars, c.verliezers)}</div>` : ''}</div>`).join('')}</div>
     ${f.vooraf ? `<div class="vr-verw"><em>Beweegt al vooraf:</em> ${esc(f.vooraf)}</div>` : ''}
   </details>`;
@@ -932,7 +933,7 @@ function voorspelKaart(v) {
     : `<span class="vs-uit loopt">Loopt tot ${new Date(v.tot).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric' })} ${tijd(v.tot)}</span>`;
   return `<div class="vs ${kl} ${v.uitkomst || ''}">
     ${v.vooruit ? `<span class="vs-voor">⏩ Vóór de gebeurtenis · ${esc(String(v.thema || '').replace(/^Vooruit: /, ''))}</span>` : ''}
-    <div class="vs-r"><div class="ico" style="background:${bg};color:${fg}">${esc(v.asset)}</div><div class="vs-wat"><b>${esc(v.naam || v.asset)} ${wat}</b>${status}</div><div class="kans"><b>${v.kans}%</b><span>kans</span></div></div>
+    <div class="vs-r"><div class="ico" style="background:${bg};color:${fg}">${esc(v.asset)}</div><div class="vs-wat"><b>${esc(v.naam || v.asset)} ${wat}</b>${status}</div><div class="kans"><b>${v.kans}%</b><span>${v.basiskans != null ? `normaal ${v.basiskans}%` : 'kans'}</span></div></div>
     <div class="balk"><i style="width:${v.kans}%"></i></div>
     ${v.keten?.length ? `<div class="sc-k">${ketenTekst(v.keten)}</div>` : ''}
     <p>${esc(v.reden)}</p>
@@ -945,11 +946,12 @@ function renderVoorspel() {
   const dag = dagen[0], vanDag = dag ? alle.filter(v => v.datum === dag.datum) : [];
   const klaar = alle.filter(v => v.uitkomst), goed = klaar.filter(v => v.uitkomst === 'goed').length;
   const trefkans = klaar.length ? goed / klaar.length : null, gemKans = klaar.length ? klaar.reduce((a, v) => a + v.kans, 0) / klaar.length / 100 : null;
+  const metBasis = klaar.filter(v => v.basiskans != null), basis = metBasis.length ? metBasis.reduce((a, v) => a + v.basiskans, 0) / metBasis.length / 100 : null;
   const ouder = alle.filter(v => !dag || v.datum !== dag.datum);
   const perDag = [...new Set(ouder.map(v => v.datum))];
   const scoreHtml = `  <div class="card"><div class="card-h"><h2>Scorebord</h2><span class="mut" style="font-size:12px">${klaar.length} nagekeken</span></div><div class="card-b">
-    ${klaar.length ? `<div class="score"><div><b>${goed}/${klaar.length}</b><span>uitgekomen</span></div><div><b>${Math.round(trefkans * 100)}%</b><span>trefkans</span></div><div><b>${Math.round(gemKans * 100)}%</b><span>zeiden ze</span></div></div>
-      <p class="mut vs-oordeel">${trefkans >= gemKans - 0.03 ? (trefkans > 0.55 ? 'De traders zitten vaker goed dan een gok, en ongeveer zo vaak als ze zelf zeiden.' : 'Zo vaak goed als ze zeiden, maar nog niet beter dan kop of munt.') : 'De traders zijn zekerder dan terecht: ze zitten minder vaak goed dan ze zelf denken.'} ${klaar.length < 20 ? 'Na een paar weken zegt dit pas echt iets.' : ''}</p>`
+    ${klaar.length ? `<div class="score"><div><b>${goed}/${klaar.length}</b><span>uitgekomen</span></div><div><b>${Math.round(trefkans * 100)}%</b><span>trefkans</span></div><div><b>${Math.round(gemKans * 100)}%</b><span>zeiden ze</span></div><div><b>${basis != null ? Math.round(basis * 100) + '%' : '–'}</b><span>basiskans</span></div></div>
+      <p class="mut vs-oordeel">${trefkans >= gemKans - 0.03 ? (trefkans > 0.55 ? 'De traders zitten vaker goed dan een gok, en ongeveer zo vaak als ze zelf zeiden.' : 'Zo vaak goed als ze zeiden, maar nog niet beter dan kop of munt.') : 'De traders zijn zekerder dan terecht: ze zitten minder vaak goed dan ze zelf denken.'} ${klaar.length < 20 ? 'Na een paar weken zegt dit pas echt iets.' : ''} ${basis != null ? (trefkans > basis + 0.02 ? 'Ze doen het beter dan gewoon de trend volgen (basiskans).' : 'Nog niet beter dan gewoon de trend volgen (basiskans).') : ''}</p>`
     : '<p class="mut" style="font-size:13px">Zodra de eerste voorspellingen verlopen, zie je hier hoe vaak de traders gelijk hadden.</p>'}
   </div></div>`;
   const eerderHtml = `  ${perDag.length ? `<div class="card"><button type="button" class="tl-ouder" data-vsoud style="margin:12px 16px;width:calc(100% - 32px)">${vsOud ? '▴ Inklappen' : `▾ Eerdere voorspellingen · ${perDag.length} dag${perDag.length === 1 ? '' : 'en'}`}<span>${ouder.filter(v => v.uitkomst === 'goed').length} van ${ouder.filter(v => v.uitkomst).length} uitgekomen</span></button>

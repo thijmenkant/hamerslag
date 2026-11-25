@@ -8,6 +8,7 @@ import { MODELLEN, START_MODEL, env } from './config.js';
 const TABELLEN = {
   traders: 'id,model,geschrapt', rounds: 'id,spoed,aanleiding', sources: 'id', messages: 'id', trades: 'id',
   snapshots: 't', market: 'symbol,rank,cat', headlines: 'url', state: 'id,data', voorzittingen: 'id,model',
+  dagvoorspelling: 'datum,themas,vooruit', voorspellingen: 'id,keten,vooruit,basiskans',
 };
 
 export async function controle({ fetchFn = fetch, log = console.log } = {}) {
@@ -158,6 +159,19 @@ export async function controle({ fetchFn = fetch, log = console.log } = {}) {
       goedeItems.length ? goed(`Nieuws ${f.naam}: ${goedeItems.length} berichten met kop, link en datum`) : let_op(`Nieuws ${f.naam}: geen bruikbare berichten gevonden`, 'de andere nieuwsbronnen gaan gewoon door; stuur deze melding door');
     } catch (e) { let_op(`Nieuws ${f.naam}: geen verbinding`, e.message); }
   }
+
+  // 5b. Bronnen van de voorspeller: echte dagkoersen, wedmarkten
+  try {
+    const { fetchDagkoersen } = await import('./dagdata.js');
+    const d = await fetchDagkoersen([{ symbol: 'SPY', kind: 'etf' }, { symbol: 'BTC', kind: 'crypto' }]);
+    d.SPY?.length >= 200 ? goed(`Dagkoersen aandelen (Yahoo/Stooq): ${d.SPY.length} dagen SPY`) : let_op('Dagkoersen aandelen (Yahoo/Stooq) niet bereikbaar', 'de voorspeller valt terug op de uur-RSI');
+    d.BTC?.length >= 200 ? goed(`Dagkoersen crypto (Bitvavo): ${d.BTC.length} dagen BTC`) : let_op('Dagkoersen crypto (Bitvavo) niet bereikbaar', 'de voorspeller valt terug op de uur-RSI');
+  } catch (e) { let_op('Dagkoersen: fout', e.message); }
+  try {
+    const { fetchWedmarkten } = await import('./wedmarkt.js');
+    const w = await fetchWedmarkten();
+    w.length ? goed(`Wedmarkten (Polymarket): ${w.length} relevante markten, bijv. "${w[0].vraag}" ${w[0].kans}%`) : let_op('Wedmarkten (Polymarket): geen relevante markten gevonden');
+  } catch (e) { let_op('Wedmarkten (Polymarket) niet bereikbaar', e.message); }
 
   // 6. Pushmelding
   // Meldingen: stuur een testmelding naar elk apparaat dat ze in de app aanzette

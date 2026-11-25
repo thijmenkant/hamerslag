@@ -608,3 +608,4 @@ details.vr:not([open]){gap:0}
 .vs-blok{gap:10px}.vs{gap:6px;padding:10px 12px}
 .vr-balk{width:100%}.vr-balk i{justify-content:center;padding:0}
 .vr-leg{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--mut)}.vr-leg span{display:flex;align-items:center;gap:5px}.vr-leg span::before{content:'';width:8px;height:8px;border-radius:2px;background:#3B82F6}.vr-leg .s1::before{background:#94A3B8}
+.score{grid-template-columns:repeat(4,1fr)}.score b{font-size:17px}@media (max-width:420px){.score span{font-size:10.5px}}
