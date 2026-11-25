@@ -7,7 +7,7 @@ self.addEventListener('push', e => {
   try { d = e.data ? e.data.json() : {}; } catch { d = { titel: 'Hamerslag', tekst: e.data ? e.data.text() : '' }; }
   e.waitUntil(self.registration.showNotification(d.titel || 'Hamerslag', {
     body: d.tekst || '',
-    icon: 'icon-192.png',
+    icon: 'icon-192.png?v=2',
     tag: d.tag || undefined,
     renotify: !!d.tag,
     requireInteraction: !!d.urgent,

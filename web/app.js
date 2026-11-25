@@ -237,12 +237,12 @@ async function meldingenAan() {
   const toestemming = await Notification.requestPermission();
   if (toestemming !== 'granted') throw new Error(toestemming === 'denied' ? 'Je hebt meldingen geweigerd. Zet ze aan in de instellingen van je telefoon.' : 'Geen toestemming gegeven.');
   const reg = await navigator.serviceWorker.ready;
-  if (D.demo) { await reg.showNotification('Hamerslag', { body: 'Voorbeeld: zo ziet een melding eruit.', icon: 'icon-192.png' }).catch(() => {}); return; }
+  if (D.demo) { await reg.showNotification('Hamerslag', { body: 'Voorbeeld: zo ziet een melding eruit.', icon: 'icon-192.png?v=2' }).catch(() => {}); return; }
   let sub = await reg.pushManager.getSubscription();
   if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: sleutelBytes(key) });
   const j = sub.toJSON();
   await bewaarAbonnement({ endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, apparaat: navigator.userAgent.slice(0, 160) });
-  await reg.showNotification('Meldingen staan aan', { body: 'Je krijgt nu een melding bij elke trade, spoedzitting en als er iets misgaat.', icon: 'icon-192.png', tag: 'hamerslag-aan' }).catch(() => {});
+  await reg.showNotification('Meldingen staan aan', { body: 'Je krijgt nu een melding bij elke trade, spoedzitting en als er iets misgaat.', icon: 'icon-192.png?v=2', tag: 'hamerslag-aan' }).catch(() => {});
 }
 async function meldingenUit() {
   const reg = await navigator.serviceWorker.ready, sub = await reg.pushManager.getSubscription();

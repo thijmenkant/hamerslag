@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512"><rect width="512" height="512" fill="#FF5F00"/><polyline points="-20,430 60,380 110,400 175,300 230,330 300,215 350,240 420,120 532,40" fill="none" stroke="#FFFFFF" stroke-opacity=".28" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/><g transform="translate(292 226) rotate(-32) scale(1)" fill="#FFFFFF">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512"><rect width="512" height="512" fill="#F7E4D3"/><polyline points="-20,430 60,380 110,400 175,300 230,330 300,215 350,240 420,120 532,40" fill="none" stroke="#D24E0E" stroke-opacity=".22" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/><g transform="translate(292 226) rotate(-32) scale(1)" fill="#D24E0E">
 <rect x="-14" y="40" width="28" height="214" rx="14"/>
 <rect x="-116" y="-54" width="232" height="108" rx="20"/>
-<rect x="-86" y="-60" width="12" height="120" fill="#FF5F00"/><rect x="74" y="-60" width="12" height="120" fill="#FF5F00"/></g><g fill="#FFFFFF">
+<rect x="-86" y="-60" width="12" height="120" fill="#F7E4D3"/><rect x="74" y="-60" width="12" height="120" fill="#F7E4D3"/></g><g fill="#D24E0E">
 <rect x="120" y="360" width="200" height="44" rx="12"/><rect x="142" y="334" width="156" height="34" rx="10"/></g>
-<g stroke="#FFFFFF" stroke-width="14" stroke-linecap="round"><line x1="150" y1="300" x2="116" y2="280"/><line x1="166" y1="266" x2="146" y2="230"/><line x1="134" y1="330" x2="94" y2="328"/></g></svg>
+<g stroke="#D24E0E" stroke-width="14" stroke-linecap="round"><line x1="150" y1="300" x2="116" y2="280"/><line x1="166" y1="266" x2="146" y2="230"/><line x1="134" y1="330" x2="94" y2="328"/></g></svg>
