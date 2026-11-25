@@ -16,13 +16,13 @@ export function kiesWedmarkten(events, { nu = new Date(), max = 14 } = {}) {
     const markten = (e.markets || []).filter(m => m.active !== false && !m.closed).map(m => {
       const uitk = lijst(m.outcomes), prijs = lijst(m.outcomePrices).map(Number);
       const ja = uitk.findIndex(o => /^yes$/i.test(o));
-      return { vraag: String(m.question || e.title).slice(0, 140), kans: ja >= 0 ? prijs[ja] : prijs[0], einde: m.endDate || e.endDate, volume: Number(m.volume24hr ?? m.volume ?? 0) };
+      return { id: String(m.id ?? ''), slug: m.slug || e.slug || '', vraag: String(m.question || e.title).slice(0, 140), kans: ja >= 0 ? prijs[ja] : prijs[0], einde: m.endDate || e.endDate, volume: Number(m.volume24hr ?? m.volume ?? 0) };
     }).filter(m => Number.isFinite(m.kans) && m.kans >= 0.03 && m.kans <= 0.97 && (!m.einde || new Date(m.einde).getTime() <= grens) && (!m.einde || new Date(m.einde) > nu));
     // per gebeurtenis de 3 drukste uitkomsten
     for (const m of markten.sort((a, b) => b.volume - a.volume).slice(0, 3)) uit.push({ ...m, event: String(e.title || '').slice(0, 100), eventVolume: Number(e.volume24hr || 0) });
   }
   return uit.sort((a, b) => b.eventVolume - a.eventVolume || b.volume - a.volume).slice(0, max)
-    .map(m => ({ vraag: m.vraag, kans: Math.round(m.kans * 100), einde: m.einde ? String(m.einde).slice(0, 10) : null, event: m.event }));
+    .map(m => ({ id: m.id, slug: m.slug, vraag: m.vraag, kans: Math.round(m.kans * 100), prijs: m.kans, einde: m.einde ? String(m.einde).slice(0, 10) : null, event: m.event }));
 }
 
 export async function fetchWedmarkten({ nu = new Date(), haal } = {}) {
@@ -31,4 +31,4 @@ export async function fetchWedmarkten({ nu = new Date(), haal } = {}) {
   return kiesWedmarkten(events, { nu });
 }
 
-export const wedRegel = w => `- ${w.vraag}: ${w.kans}% kans${w.einde ? ` (loopt tot ${w.einde})` : ''}`;
+export const wedRegel = (w, i) => `- ${i != null ? `[W${i + 1}] ` : ''}${w.vraag}: ${w.kans}% kans${w.einde ? ` (loopt tot ${w.einde})` : ''}`;

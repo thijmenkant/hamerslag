@@ -178,7 +178,12 @@ export const DEMO_STATE = {
     ontvangen: [{ sym: 'NVDA', eur: 0.01, datum: '2026-10-02', soort: 'exact' }, { sym: 'SPY', eur: 1.12, datum: '2026-10-31', soort: 'exact' }, { sym: 'BND', eur: 0.71, datum: '2026-11-03', soort: 'exact' }],
     bench: 2.31, benchStaking: {},
   },
-  positions: { ETH: { qty: 0.0985, cost: 150 }, BTC: { qty: 0.00221, cost: 121.1 }, NVDA: { qty: 0.59, cost: 96.1 }, SOL: { qty: 0.86, cost: 53.8 } },
+  positions: { ETH: { qty: 0.0985, cost: 150, piek: 0.12 }, BTC: { qty: 0.00221, cost: 121.1, stop: -0.06, doel: 0.25 }, NVDA: { qty: 0.59, cost: 96.1 }, SOL: { qty: 0.86, cost: 53.8 } },
+  shorts: { TSLA: { qty: 0.21, inzet: 74.7, cost: 75, instap: 362, sinds: new Date(NU - 2 * 86400000).toISOString() } },
+  wedden: { pot: 70, start: 100, open: [
+    { id: '1', vraag: 'Verlaagt de Fed de rente in december?', uitkomst: 'NEE', onzeKans: 15, marktKans: 30, inzet: 10, instap: 0.70, prijs: 0.76, aandelen: 14.14, reden: 'De inflatie blijft hoog; de Fed wacht.', einde: '2026-12-09' },
+    { id: '2', vraag: 'Bestand tussen Israël en Iran voor 31 december?', uitkomst: 'JA', onzeKans: 45, marktKans: 28, inzet: 20, instap: 0.28, prijs: 0.25, aandelen: 70.7, reden: 'Onderhandelingen lopen al via Qatar.', einde: '2026-12-31' }],
+    klaar: [{ id: '0', vraag: 'Bitcoin boven $60.000 op 20 november?', uitkomst: 'NEE', inzet: 10, opbrengst: 13.4, gewonnen: true, klaar: new Date(NU - 5 * 86400000).toISOString() }] },
   bench: { BTC: 58150, ETH: 1650, SOL: 64.2, AAPL: 241, NVDA: 162, TSLA: 352, MSFT: 349, XRP: 1.01, BNB: 551, DOGE: 0.163, AMZN: 193, GOOGL: 274, META: 571, ASML: 731 },
   started_at: new Date(NU - 7 * 86400000).toISOString(),
 };

@@ -53,7 +53,18 @@ const actieveTraders = () => D.traders.filter(t => t.active !== false);
 function waarde() {
   let v = Number(D.state?.cash ?? 1000) + Number(D.state?.pot || 0);
   for (const [s, p] of Object.entries(D.state?.positions || {})) v += p.qty * (prijzen[s] || 0);
-  return v;
+  for (const s of Object.keys(D.state?.shorts || {})) v += shortWaarde(s);
+  return v + wedWaarde();
+}
+const shortWaarde = s => { const p = D.state?.shorts?.[s]; return p ? Math.max(0, p.inzet + p.qty * (p.instap - (prijzen[s] ?? p.instap))) : 0; };
+const wedWaarde = () => { const w = D.state?.wedden; return w ? Number(w.pot || 0) + (w.open || []).reduce((a, x) => a + x.aandelen * (x.prijs ?? x.instap), 0) : 0; };
+// Woorden per actie: [kort, voorstel, gedaan, niet gedaan]
+const ACTIE = { KOOP: ['Koop', 'Kopen', 'Gekocht', 'Niet gekocht'], VERKOOP: ['Verkoop', 'Verkopen', 'Verkocht', 'Niet verkocht'], SHORT: ['Short', 'Short gaan', 'Short gegaan', 'Niet short gegaan'], DEKKEN: ['Dekken', 'Short sluiten', 'Short gesloten', 'Niet gedekt'] };
+const actieW = (a, i) => (ACTIE[a] || ACTIE.KOOP)[i];
+// Stop en doel van een positie (zelfde regels als de motor)
+function grensVan(p, waardeNu) {
+  const res = p.cost > 0 ? waardeNu / p.cost - 1 : 0, piek = Math.max(p.piek ?? res, res), vast = piek >= 0.10;
+  return { stop: vast ? Math.max(p.stop ?? -0.08, 0) : (p.stop ?? -0.08), doel: p.doel ?? 0.15, vast };
 }
 function benchWaarde() {
   const b = D.state?.bench || {}, syms = Object.keys(prijzen);
@@ -166,7 +177,7 @@ function statusBalk(s = speler.s) {
   if (isBezig(s) || L?.fase === 'zitting') {
     const naam = s.spoed || L?.spoed ? 'Spoedzitting' : `Zitting ${isBezig(s) ? (D.round?.no ?? '') : ''}`.trim();
     const p = isBezig(s) ? (s.voorstel || D.round?.proposal) : null;
-    const wat = p ? `Op tafel: ${p.actie === 'KOOP' ? 'Koop' : 'Verkoop'} ${eur(p.bedrag, 0)} ${esc(p.asset)} · ${esc(faseTekst(s))}` : `${L?.onderwerp ? esc(L.onderwerp) + ' · ' : ''}${vg?.fase === 0 ? 'bronnen ophalen' : esc(faseTekst(s))}`;
+    const wat = p ? `Op tafel: ${actieW(p.actie, 0)} ${eur(p.bedrag, 0)} ${esc(p.asset)} · ${esc(faseTekst(s))}` : `${L?.onderwerp ? esc(L.onderwerp) + ' · ' : ''}${vg?.fase === 0 ? 'bronnen ophalen' : esc(faseTekst(s))}`;
     return `<div class="nb zit" data-statusopen><span class="ic">🔨</span><span class="tx"><b>${pls}${esc(naam)} · nu live</b><span>${wat}</span></span>${pijl}<a class="kijk" href="#zaal">Kijk mee →</a></div>`;
   }
   if (L?.fase === 'voorzitting') return `<div class="nb nvz" data-statusopen><span class="ic">⚖</span><span class="tx"><b>${pls}Voorzitting${L.assets?.length ? ' over ' + esc(L.assets.slice(0, 2).join(' en ')) : ''}</b><span>Eva, Daan en Noor bekijken: ${esc(L.onderwerp || 'wat er het afgelopen uur gebeurde')}</span></span>${pijl}</div>`;
@@ -202,7 +213,7 @@ function besluitKaart() {
   if (!r) return '';
   const p = r.proposal, ok = r.outcome === 'UITGEVOERD';
   const n = actieveTraders().length || 10;
-  const actie = p ? (p.actie === 'KOOP' ? (ok ? 'Gekocht' : 'Niet gekocht') : (ok ? 'Verkocht' : 'Niet verkocht')) : 'Geen trade';
+  const actie = p ? actieW(p.actie, ok ? 2 : 3) : 'Geen trade';
   const [bg, fg] = p ? kleurVan(p.asset) : ['#F1F3F8', '#5B6478'];
   const voor = Number(r.votes_for ?? 0);
   return `<div class="card besluit"><div class="card-h"><h2>Laatste besluit</h2><span class="tag ${ok ? 'VOOR' : 'TEGEN'}">${ok ? 'AANGENOMEN' : 'AFGEWEZEN'}</span></div>
@@ -302,7 +313,7 @@ function tegelsKaart(r, vz) {
   const vandaag = d => d && new Date(d).toDateString() === new Date().toDateString();
   const zitV = (D.rondes || []).filter(x => vandaag(x.started_at) && x.status !== 'fout').length, chkV = (D.voorzittingen || []).filter(x => vandaag(x.t)).length;
   return `<div class="tegels">
-    <a class="tegel" href="#zaal"><span class="eyebrow">${bezig ? 'Nu in de zaal' : 'Laatste zitting'}</span><b>${p ? `${esc(p.asset)} ${p.actie === 'KOOP' ? 'kopen' : 'verkopen'}` : bezig ? 'Debat loopt' : r ? 'Geen voorstel' : 'Nog geen'}</b>${bezig ? '<span class="tag ZIT">LIVE</span>' : r && p && r.votes_for != null ? `<span class="tag ${ok ? 'VOOR' : 'AF'}">${ok ? 'JA' : 'NEE'} · ${voor}–${n - voor}</span>` : r ? `<span class="tag NIKS">${r.status === 'fout' ? 'MISLUKT' : 'GEEN TRADE'}</span>` : ''}</a>
+    <a class="tegel" href="#zaal"><span class="eyebrow">${bezig ? 'Nu in de zaal' : 'Laatste zitting'}</span><b>${p ? `${esc(p.asset)} ${actieW(p.actie, 1).toLowerCase()}` : bezig ? 'Debat loopt' : r ? 'Geen voorstel' : 'Nog geen'}</b>${bezig ? '<span class="tag ZIT">LIVE</span>' : r && p && r.votes_for != null ? `<span class="tag ${ok ? 'VOOR' : 'AF'}">${ok ? 'JA' : 'NEE'} · ${voor}–${n - voor}</span>` : r ? `<span class="tag NIKS">${r.status === 'fout' ? 'MISLUKT' : 'GEEN TRADE'}</span>` : ''}</a>
     <div class="tegel"><span class="eyebrow">Voorzitting ${vz ? tijd(vz.t) : ''}</span><b>${k ? `${esc(k.asset)} · kans ${k.score}/10` : vz ? 'Rustig uur' : 'Nog geen'}</b>${vz ? `<span class="tag ${vz.besluit === 'ZITTING' ? 'VOOR' : vz.besluit === 'RUSTIG' ? 'NIKS' : 'GEEL'}">${vz.besluit === 'ZITTING' ? 'ZITTING' : vz.besluit === 'RUSTIG' ? 'RUSTIG' : 'GEEN ZITTING'}</span>` : ''}</div>
     <div class="tegel"><span class="eyebrow">Volgende check</span><b id="tegelCheck">${String(volgendeRonde().getHours()).padStart(2, '0')}:00</b><span class="mut" style="font-size:11.5px">elk heel uur</span></div>
     <div class="tegel"><span class="eyebrow">Vandaag</span><b>${zitV} zitting${zitV === 1 ? '' : 'en'}</b><span class="mut" style="font-size:11.5px">${chkV} voorzitting${chkV === 1 ? '' : 'en'}</span></div>
@@ -311,9 +322,9 @@ function tegelsKaart(r, vz) {
 const uitlegVan = (r, msgs = []) => r?.proposal?.uitleg_kort || (msgs.find(m => m.phase === 'uitleg')?.action) || null;
 function uitlegBlok(u, r) {
   if (!u) return '';
-  const ok = r.outcome === 'UITGEVOERD', koop = r.proposal?.actie === 'KOOP';
+  const ok = r.outcome === 'UITGEVOERD';
   return `<div class="vak uitleg">
-    <div class="ul-r"><span class="ul-i">💬</span><div><span class="eyebrow">${ok ? (koop ? 'Waarom gekocht' : 'Waarom verkocht') : 'Waarom afgewezen'}</span><p>${esc(u.waarom)}</p></div></div>
+    <div class="ul-r"><span class="ul-i">💬</span><div><span class="eyebrow">${ok ? `Waarom ${actieW(r.proposal?.actie, 2).toLowerCase()}` : 'Waarom afgewezen'}</span><p>${esc(u.waarom)}</p></div></div>
     ${u.verwachting ? `<div class="ul-r"><span class="ul-i">🔮</span><div><span class="eyebrow">Verwachting</span><p>${esc(u.verwachting)}</p></div></div>` : ''}
     ${u.plan ? `<div class="ul-r"><span class="ul-i">📌</span><div><span class="eyebrow">Plan</span><p>${esc(u.plan)}</p></div></div>` : ''}
   </div>`;
@@ -329,7 +340,7 @@ function zittingInhoud(r, msgs, { kort = false } = {}) {
   return `<div class="vakken">
       ${uitlegBlok(uitlegVan(r, msgs), r)}
       ${waarom ? `<div class="vak vak-waarom"><span class="eyebrow">Aanleiding</span><p>${esc(waarom)}</p></div>` : ''}
-      <div class="vak vak-tafel">${p ? `<div class="ico" style="background:${bg};color:${fg}">${esc(p.asset)}</div>` : ''}<div style="flex:1;min-width:0"><span class="eyebrow">Op tafel</span><div class="zk-wat">${p ? `${p.actie === 'KOOP' ? 'Kopen' : 'Verkopen'} <b>${eur(r.trade?.bedrag ?? p.bedrag, 0)} ${esc(p.asset)}</b>` : 'Geen voorstel'}</div>${!p && r.outcome === 'GEEN VOORSTEL' ? '<div class="mut" style="font-size:12.5px;margin-top:2px">De traders vonden geen trade die nu kon of verstandig was.</div>' : ''}</div>${kort ? '' : uitkomstTag(r)}</div>
+      <div class="vak vak-tafel">${p ? `<div class="ico" style="background:${bg};color:${fg}">${esc(p.asset)}</div>` : ''}<div style="flex:1;min-width:0"><span class="eyebrow">Op tafel</span><div class="zk-wat">${p ? `${actieW(p.actie, 1)} <b>${eur(r.trade?.bedrag ?? p.bedrag, 0)} ${esc(p.asset)}</b>` : 'Geen voorstel'}</div>${!p && r.outcome === 'GEEN VOORSTEL' ? '<div class="mut" style="font-size:12.5px;margin-top:2px">De traders vonden geen trade die nu kon of verstandig was.</div>' : ''}</div>${kort ? '' : uitkomstTag(r)}</div>
       ${r.votes_for != null ? `<div class="vak"><div class="zk-stand"><span class="up">${voor} voor</span><span class="mut">${NODIG_STEMMEN} nodig</span><span class="dn">${n - voor} tegen</span></div><div class="votebar dun"><i class="v" style="width:${voor / n * 100}%"></i><i class="t" style="width:${(n - voor) / n * 100}%"></i></div></div>` : ''}
       ${sv ? `<div class="vak arg v"><span class="eyebrow">Sterkste voor</span><p><b>${esc(naam(sv.id))}</b> ${esc(sv.reden)}</p></div>` : ''}
       ${stg ? `<div class="vak arg t"><span class="eyebrow">Sterkste tegen</span><p><b>${esc(naam(stg.id))}</b> ${esc(stg.reden)}</p></div>` : ''}
@@ -376,7 +387,7 @@ function tlZitting(r, nieuwste) {
   return `<div class="tl-it tl-zit k-${tlKleurZit(r)} ${open ? 'open' : ''}">
     <button type="button" class="tl-rij tl-kop" ${nieuwste ? '' : `data-tlopen="z${r.id}"`}><span class="mono tl-t">${tijd(r.started_at)}</span><span class="tl-naam">${r.spoed ? 'Spoedzitting' : 'Zitting ' + esc(r.no)}</span><span class="tl-uit">${tlUitkomst(r)}</span>${nieuwste ? '' : `<span class="tl-pijl">${open ? '▴' : '▾'}</span>`}</button>
     ${vraag && !open ? `<div class="tl-vraag">Jouw vraag: ${esc((r.aanleiding.find(a => a.soort === 'vraag').tekst || '').replace(/^vraag van de eigenaar: /, ''))}</div>` : ''}
-    ${open ? zittingInhoud(r, msgs, { kort: true }) : `<div class="tl-ond"><b>${p ? `${p.actie === 'KOOP' ? 'Kopen' : 'Verkopen'} ${eur(p.bedrag, 0)} ${esc(p.asset)}` : r.status === 'fout' ? 'Technische fout, telde niet mee' : 'Geen voorstel'}</b>${r.votes_for != null ? ` · ${voor} voor, ${n - voor} tegen` : ''}</div>${uitlegVan(r) ? `<div class="tl-waarom">${esc(uitlegVan(r).waarom)}</div>` : ''}`}
+    ${open ? zittingInhoud(r, msgs, { kort: true }) : `<div class="tl-ond"><b>${p ? `${actieW(p.actie, 1)} ${eur(p.bedrag, 0)} ${esc(p.asset)}` : r.status === 'fout' ? 'Technische fout, telde niet mee' : 'Geen voorstel'}</b>${r.votes_for != null ? ` · ${voor} voor, ${n - voor} tegen` : ''}</div>${uitlegVan(r) ? `<div class="tl-waarom">${esc(uitlegVan(r).waarom)}</div>` : ''}`}
   </div>`;
 }
 function tijdlijnKaart() {
@@ -515,7 +526,7 @@ function updateMini(s) {
     return `<div class="seat ${cls}" style="left:${x - 23}px;top:${y - 23}px"><div class="ring"><img src="${avatarUrl(t.look, { size: 64 })}" alt=""></div><span class="nm">${vz ? 'Voorzitter' : esc(t.name)}</span></div>`;
   }).join('');
   const p = s.uitslag?.bedrag && s.voorstel ? { ...s.voorstel, bedrag: s.uitslag.bedrag } : s.voorstel;
-  const podium = `<div class="podium"><span class="eyebrow">${s.fase === 'uitslag' ? 'Uitslag' : 'Op tafel'}</span><b>${p ? `${esc(p.actie === 'KOOP' ? 'Koop' : 'Verkoop')} ${eur(p.bedrag, 0)} ${esc(p.asset)}` : 'Analyse…'}</b>${s.fase === 'stemming' || s.fase === 'uitslag' ? `<span style="font-size:12px"><b class="up" style="display:inline;font-size:12px">${s.voor} voor</b> · <span style="color:#C2410C">${s.tegen} tegen</span></span>` : ''}</div>`;
+  const podium = `<div class="podium"><span class="eyebrow">${s.fase === 'uitslag' ? 'Uitslag' : 'Op tafel'}</span><b>${p ? `${esc(actieW(p.actie, 0))} ${eur(p.bedrag, 0)} ${esc(p.asset)}` : 'Analyse…'}</b>${s.fase === 'stemming' || s.fase === 'uitslag' ? `<span style="font-size:12px"><b class="up" style="display:inline;font-size:12px">${s.voor} voor</b> · <span style="color:#C2410C">${s.tegen} tegen</span></span>` : ''}</div>`;
   let bubble = '';
   const sp = pos.find(q => q.t.id === s.spreker);
   if (sp && s.tekst) {
@@ -547,7 +558,7 @@ function uitkomstTag(r) {
   if (r.outcome === 'AFGEWEZEN') return '<span class="tag AF">AFGEWEZEN</span>';
   return `<span class="tag NIKS">${esc(r.outcome || 'GEEN TRADE')}</span>`;
 }
-const opTafel = p => p ? `${p.actie === 'VERKOOP' ? 'Verkopen' : 'Kopen'}: ${esc(p.asset)} voor ${eur(p.bedrag, 0)}` : 'Geen voorstel op tafel';
+const opTafel = p => p ? `${actieW(p.actie, 1)}: ${esc(p.asset)} voor ${eur(p.bedrag, 0)}` : 'Geen voorstel op tafel';
 function logZitting(r, open) {
   const p = r.proposal, n = actieveTraders().length || 10, voor = Number(r.votes_for ?? 0);
   const kop = `<div class="lg-kop"><span class="mono mut">${wanneer(r.started_at)}</span><span class="tag ZIT">${r.spoed ? 'SPOEDZITTING' : 'ZITTING ' + esc(r.no)}</span><span class="lg-rechts">${uitkomstTag(r)}</span></div>`;
@@ -569,7 +580,7 @@ function logCheck(v) {
   const zit = v.besluit === 'ZITTING';
   return `<div class="lg-item lg-check"><div class="lg-kop"><span class="mono mut">${wanneer(v.t)}</span><span class="tag ${zit ? 'VOOR' : 'GEEL'}">VOORZITTING · ${zit ? 'ZITTING' : 'GEEN ZITTING'}</span></div>
     ${v.aanleiding?.length ? `<div class="lg-l">Onderwerp</div><div class="lg-onderwerp">${v.aanleiding.slice(0, 3).map(a => esc(a.tekst)).join('<br>')}</div>` : ''}
-    ${(v.kansen || []).map(k => `<div class="lg-kans"><b>${esc(k.asset)}</b><span class="tag ${k.richting === 'VERKOOP' ? 'VERKOOP' : 'KOOP'}">${esc(k.richting)}</span><span class="mut">kans ${k.score}/10 · nodig 6</span><span class="lg-meter"><i style="width:${Math.min(10, k.score) * 10}%" class="${k.score >= 6 ? 'hoog' : ''}"></i></span></div>`).join('')}
+    ${(v.kansen || []).map(k => `<div class="lg-kans"><b>${esc(k.asset)}</b><span class="tag ${['VERKOOP', 'SHORT'].includes(k.richting) ? k.richting : 'KOOP'}">${esc(k.richting)}</span><span class="mut">kans ${k.score}/10 · nodig 6</span><span class="lg-meter"><i style="width:${Math.min(10, k.score) * 10}%" class="${k.score >= 6 ? 'hoog' : ''}"></i></span></div>`).join('')}
     ${v.reden ? `<div class="lg-reden">Voorzitter Eva: ${esc(v.reden)}</div>` : ''}</div>`;
 }
 function logboekKaart() {
@@ -733,12 +744,19 @@ function extraOpbrengsten() {
 
 // ---------- PORTEFEUILLE ----------
 let bereik = '1W';
+// Automatisch verkopen: een balkje van stop (links) naar doel (rechts), met een stip waar hij nu staat
+function grensHtml(p, val) {
+  const g = grensVan(p, val), res = p.cost > 0 ? val / p.cost - 1 : 0, pc = x => `${x > 0 ? '+' : x < 0 ? '−' : ''}${Math.abs(Math.round(x * 100))}%`;
+  const plek = Math.max(0, Math.min(100, (res - g.stop) / (g.doel - g.stop) * 100));
+  return `<span class="gb" title="Automatisch verkopen bij ${pc(g.stop)} of ${pc(g.doel)}"><em class="l">${g.vast ? '🔒 ' : ''}${pc(g.stop)}</em><span class="gb-b"><span class="gb-p" style="left:${plek}%"></span></span><em class="r">${pc(g.doel)}</em></span>`;
+}
 function renderPortefeuille() {
   const v = waarde(), b = benchWaarde(), r = v / 1000 - 1;
   const [heel, cent] = nf(v).split(',');
   const pos = Object.entries(D.state?.positions || {}).filter(([, p]) => p.qty > 0).map(([s, p]) => ({ s, p, val: p.qty * (prijzen[s] || 0) })).sort((a, b) => b.val - a.val);
-  const kleuren = ['#F25600', '#0891B2', '#059669', '#7E22CE', '#E11D48', '#D97706', '#0369A1'];
-  const delen = [{ naam: 'Vrij geld', val: Number(D.state?.cash || 0), kleur: '#CBD2E1' }, ...(D.state?.pot ? [{ naam: 'Dividendpot', val: Number(D.state.pot), kleur: '#B8862B' }] : []), ...pos.map((x, i) => ({ naam: x.s, val: x.val, kleur: kleuren[i % kleuren.length] }))];
+  const kleuren = ['#F25600', '#0891B2', '#059669', '#64748B', '#E11D48', '#D97706', '#0369A1'];
+  const shorts = Object.entries(D.state?.shorts || {}).map(([s, p]) => ({ s, p, val: shortWaarde(s) }));
+  const delen = [{ naam: 'Vrij geld', val: Number(D.state?.cash || 0), kleur: '#CBD2E1' }, ...(D.state?.pot ? [{ naam: 'Dividendpot', val: Number(D.state.pot), kleur: '#B8862B' }] : []), ...(D.state?.wedden ? [{ naam: 'Wedpot', val: wedWaarde(), kleur: '#2563EB' }] : []), ...pos.map((x, i) => ({ naam: x.s, val: x.val, kleur: kleuren[i % kleuren.length] })), ...shorts.map(x => ({ naam: `${x.s} op daling`, val: x.val, kleur: '#334155' }))];
   $('#v-portefeuille').innerHTML = `
   <h2 class="pagetitle">Portefeuille</h2>
   <div class="grid">
@@ -757,11 +775,13 @@ function renderPortefeuille() {
     </div>
     <div class="col">
       <div class="card"><div class="card-h"><h2>Posities</h2></div>
-        ${pos.map(({ s, p, val }) => { const [bg, fg] = kleurVan(s); const res = val / p.cost - 1; return `<div class="row"><div class="coin" style="background:${bg};color:${fg}">${esc(s)}</div><div class="nm"><b>${esc(D.market.find(m => m.symbol === s)?.name || s)}</b><span>${nf(p.qty, p.qty < 1 ? 5 : 3)} stuks · ingelegd ${eur(p.cost)}</span></div><div class="px"><b>${eur(val)}</b><span class="${res >= 0 ? 'up' : 'dn'}">${pct(res, 1)}</span></div></div>`; }).join('') || '<div class="card-b mut">Nog geen posities: alles staat in cash.</div>'}
+        ${pos.map(({ s, p, val }) => { const [bg, fg] = kleurVan(s); const res = val / p.cost - 1; return `<div class="row"><div class="coin" style="background:${bg};color:${fg}">${esc(s)}</div><div class="nm"><b>${esc(D.market.find(m => m.symbol === s)?.name || s)}</b><span>${nf(p.qty, p.qty < 1 ? 5 : 3)} stuks · ingelegd ${eur(p.cost)}</span>${grensHtml(p, val)}</div><div class="px"><b>${eur(val)}</b><span class="${res >= 0 ? 'up' : 'dn'}">${pct(res, 1)}</span></div></div>`; }).join('')}
+        ${shorts.map(({ s, p, val }) => { const [bg, fg] = kleurVan(s); const res = val / p.cost - 1; return `<div class="row"><div class="coin" style="background:${bg};color:${fg}">${esc(s)}</div><div class="nm"><b>${esc(D.market.find(m => m.symbol === s)?.name || s)} <span class="tag SHORT">↘ op daling</span></b><span>ingezet bij ${prijs(p.instap)} · nu ${prijs(prijzen[s])}</span>${grensHtml(p, val)}</div><div class="px"><b>${eur(val)}</b><span class="${res >= 0 ? 'up' : 'dn'}">${pct(res, 1)}</span></div></div>`; }).join('')}
+        ${!pos.length && !shorts.length ? '<div class="card-b mut">Nog geen posities: alles staat in cash.</div>' : ''}
       </div>
       ${extraOpbrengsten()}
       <div class="card"><div class="card-h"><h2>Laatste besluiten</h2></div>
-        ${(D.trades || []).slice(0, 12).map(t => `<div class="row"><span class="tag ${esc(t.actie)}">${esc(t.actie)}</span><div class="nm"><b>${eur(Number(t.bedrag))} ${esc(t.asset)}</b><span>${dag(t.t)} · tegen ${prijs(t.prijs)}</span></div><span class="mono" style="font-size:13px">${t.votes_for}/10</span></div>`).join('') || '<div class="card-b mut">Nog geen trades.</div>'}
+        ${(D.trades || []).slice(0, 12).map(t => `<div class="row"><span class="tag ${esc(t.actie)}">${esc(t.actie)}</span><div class="nm"><b>${eur(Number(t.bedrag))} ${esc(t.asset)}</b><span>${dag(t.t)} · tegen ${prijs(t.prijs)}</span></div><span class="mono" style="font-size:13px">${t.votes_for == null ? 'auto' : `${t.votes_for}/10`}</span></div>`).join('') || '<div class="card-b mut">Nog geen trades.</div>'}
       </div>
     </div>
   </div>`;
@@ -949,10 +969,26 @@ function renderVoorspel() {
   const metBasis = klaar.filter(v => v.basiskans != null), basis = metBasis.length ? metBasis.reduce((a, v) => a + v.basiskans, 0) / metBasis.length / 100 : null;
   const ouder = alle.filter(v => !dag || v.datum !== dag.datum);
   const perDag = [...new Set(ouder.map(v => v.datum))];
+  // De voorspeller in het debat: gaat vanzelf aan bij 40 nagekeken én 3 punten beter dan de basiskans
+  const nB = metBasis.length, trefB = nB ? metBasis.filter(v => v.uitkomst === 'goed').length / nB : 0, aan = nB >= 40 && trefB >= basis + 0.03;
+  const debatHtml = `<div class="vs-debat ${aan ? 'aan' : ''}"><div class="vs-debat-r"><b>${aan ? 'Telt mee in het debat' : 'Telt nog niet mee in het debat'}</b><span>${Math.min(nB, 40)} / 40</span></div><div class="vs-voortgang"><i style="width:${Math.min(100, nB / 40 * 100)}%"></i></div><small>${aan ? 'De traders krijgen de voorspelling mee; de inzet schuift mee met de zekerheid.' : 'Vanaf 40 nagekeken voorspellingen, en alleen als hij dan beter scoort dan normaal.'}</small></div>`;
+  const w = D.state?.wedden;
+  const wOpen = w?.open || [], wKlaar = w?.klaar || [];
+  const ingezet = wOpen.reduce((a, x) => a + x.inzet, 0), nuWaard = wOpen.reduce((a, x) => a + x.aandelen * (x.prijs ?? x.instap), 0), afgelopen = wKlaar.reduce((a, x) => a + (x.opbrengst || 0) - x.inzet, 0);
+  const plus = x => `${x >= 0 ? '+' : '−'}${eur(Math.abs(x))}`;
+  const wedHtml = w ? `<div class="card"><div class="card-h"><h2>Weddenschappen</h2><span class="mut" style="font-size:12px">Polymarket · nepgeld</span></div><div class="card-b vs-themas">
+    <div class="wd-kop"><div><b>${eur(ingezet)}</b><span>nu ingezet</span></div><div><b class="${nuWaard >= ingezet ? 'up' : 'dn'}">${eur(nuWaard)}</b><span>nu waard</span></div><div><b class="${afgelopen >= 0 ? 'up' : 'dn'}">${wKlaar.length ? plus(afgelopen) : '–'}</b><span>afgelopen</span></div></div>
+    ${wOpen.map(x => { const nu = x.aandelen * (x.prijs ?? x.instap), onze = x.uitkomst === 'JA' ? x.onzeKans : 100 - x.onzeKans, markt = x.uitkomst === 'JA' ? x.marktKans : 100 - x.marktKans; return `<details class="wd"><summary><b>${esc(x.vraag)}</b>
+      <span class="wd-z">Kans op <strong>${x.uitkomst === 'JA' ? 'ja' : 'nee'}</strong>: wij ${onze}%, de markt ${markt}%</span>
+      <span class="wd-g">${eur(x.inzet)} ingezet → nu <strong class="${nu >= x.inzet ? 'up' : 'dn'}">${eur(nu)}</strong></span></summary>
+      ${x.reden ? `<p>${esc(x.reden)}</p>` : ''}${x.einde ? `<small>Uitslag uiterlijk ${dagNaam(x.einde)}</small>` : ''}</details>`; }).join('') || '<p class="mut" style="font-size:13px">Nu geen weddenschappen. Het team wedt alleen als het duidelijk anders denkt dan de markt.</p>'}
+    ${wKlaar.slice(0, 3).map(x => `<div class="wd-af"><span>${x.gewonnen ? '✓' : '✗'}</span><span>${esc(x.vraag)}</span><b class="${x.gewonnen ? 'up' : 'dn'}">${plus((x.opbrengst || 0) - x.inzet)}</b></div>`).join('')}
+  </div></div>` : '';
   const scoreHtml = `  <div class="card"><div class="card-h"><h2>Scorebord</h2><span class="mut" style="font-size:12px">${klaar.length} nagekeken</span></div><div class="card-b">
-    ${klaar.length ? `<div class="score"><div><b>${goed}/${klaar.length}</b><span>uitgekomen</span></div><div><b>${Math.round(trefkans * 100)}%</b><span>trefkans</span></div><div><b>${Math.round(gemKans * 100)}%</b><span>zeiden ze</span></div><div><b>${basis != null ? Math.round(basis * 100) + '%' : '–'}</b><span>basiskans</span></div></div>
-      <p class="mut vs-oordeel">${trefkans >= gemKans - 0.03 ? (trefkans > 0.55 ? 'De traders zitten vaker goed dan een gok, en ongeveer zo vaak als ze zelf zeiden.' : 'Zo vaak goed als ze zeiden, maar nog niet beter dan kop of munt.') : 'De traders zijn zekerder dan terecht: ze zitten minder vaak goed dan ze zelf denken.'} ${klaar.length < 20 ? 'Na een paar weken zegt dit pas echt iets.' : ''} ${basis != null ? (trefkans > basis + 0.02 ? 'Ze doen het beter dan gewoon de trend volgen (basiskans).' : 'Nog niet beter dan gewoon de trend volgen (basiskans).') : ''}</p>`
+    ${klaar.length ? `<div class="score"><div><b>${goed}/${klaar.length}</b><span>uitgekomen</span></div><div><b>${Math.round(trefkans * 100)}%</b><span>goed</span></div><div><b>${Math.round(gemKans * 100)}%</b><span>verwacht</span></div><div><b>${basis != null ? Math.round(basis * 100) + '%' : '–'}</b><span>normaal</span></div></div>
+      <p class="mut vs-oordeel">${trefkans >= gemKans - 0.03 ? (trefkans > 0.55 ? 'De traders zitten vaker goed dan een gok, en ongeveer zo vaak als ze zelf zeiden.' : 'Zo vaak goed als ze zeiden, maar nog niet beter dan kop of munt.') : 'De traders zijn zekerder dan terecht: ze zitten minder vaak goed dan ze zelf denken.'} ${klaar.length < 20 ? 'Na een paar weken zegt dit pas echt iets.' : ''} ${basis != null ? (trefkans > basis + 0.02 ? 'Ze doen het beter dan normaal (gewoon de trend volgen).' : 'Nog niet beter dan normaal (gewoon de trend volgen).') : ''}</p>`
     : '<p class="mut" style="font-size:13px">Zodra de eerste voorspellingen verlopen, zie je hier hoe vaak de traders gelijk hadden.</p>'}
+    ${debatHtml}
   </div></div>`;
   const eerderHtml = `  ${perDag.length ? `<div class="card"><button type="button" class="tl-ouder" data-vsoud style="margin:12px 16px;width:calc(100% - 32px)">${vsOud ? '▴ Inklappen' : `▾ Eerdere voorspellingen · ${perDag.length} dag${perDag.length === 1 ? '' : 'en'}`}<span>${ouder.filter(v => v.uitkomst === 'goed').length} van ${ouder.filter(v => v.uitkomst).length} uitgekomen</span></button>
     ${vsOud ? `<div class="card-b vs-blok" style="padding-top:0">${perDag.map(d => `<span class="eyebrow">${dagNaam(d)}</span>${ouder.filter(v => v.datum === d).map(voorspelKaart).join('')}`).join('')}</div>` : ''}</div>` : ''}`;
@@ -967,6 +1003,7 @@ function renderVoorspel() {
     ${vanDag.map(voorspelKaart).join('')}
   </div></div>
   ${scoreHtml}
+  ${wedHtml}
   ${eerderHtml}
   </div>
   <div class="vs-kol">

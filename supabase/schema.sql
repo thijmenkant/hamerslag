@@ -225,3 +225,5 @@ grant usage, select on all sequences in schema public to service_role;
 
 -- Basiskans (hoe vaak ging het het afgelopen jaar zo, over dezelfde termijn) per voorspelling.
 alter table voorspellingen add column if not exists basiskans int;
+
+-- Wedvoorstellen staan in state.wedVoorstellen; de weddenschappen zelf in state.wedden.

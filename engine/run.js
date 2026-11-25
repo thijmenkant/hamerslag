@@ -10,7 +10,9 @@ import { CONFIG, SYMS, RADAR_MAX, vindAsset, env, MODELLEN, START_MODEL } from '
 import { push as pushEcht } from './push.js';
 import { START_TRADERS } from './traders.js';
 import { verzamelBronnen, maakPakket } from './sources.js';
-import { indicatoren, nieuweStaat, waarde, benchWaarde, beoordeel, voerUit, magHandelen, maandCode, round2, vangnetten } from './portfolio.js';
+import { vangnetTekst } from './vangnet.js';
+import { voorspellerStatus, voorspelBronnen, zekerheidFactor } from './voorspel.js';
+import { indicatoren, nieuweStaat, waarde, benchWaarde, beoordeel, voerUit, magHandelen, maandCode, round2, vangnetten, bezitVan } from './portfolio.js';
 import { context, pitchPrompt, radarVan, stemPrompt, stemPromptEnkel, controleerVoorstellen, kiesVoorstel, controleerDebat, controleerStemmen, bedragUitStemmen, cijferCheck, controlePrompt, verwerkControle, debatVast, debatDeelPrompt, evaPrompt, controleerEva } from './debate.js';
 import { kiesVertrekker, nieuweTraderPrompt, maakNieuweTrader, isNieuweMaand } from './rotation.js';
 import { maakDb } from './db.js';
@@ -35,7 +37,7 @@ export async function ronde({ db = maakDb(), bronnen = verzamelBronnen, llm = ll
   // 2. Bronnen ophalen (met live voortgang voor de statusbalk in de app)
   const vraagA = aanleiding?.find(a => a.soort === 'vraag');
   const vg = maakVoortgang(db, { fase: 'zitting', spoed: !!spoed, onderwerp: vraagA ? vraagA.tekst.replace(/^vraag van de eigenaar: /, 'Jouw vraag: ') : spoed ? spoed.titel : (aanleiding || []).filter(a => a.soort !== 'agenda').map(a => a.tekst).join(' · ') });
-  const ruw = await bronnen({ bezit: Object.keys((await db.loadState())?.positions || {}), focus: [...(agenda || []).map(k => k.asset), ...(spoed?.assets || [])], nu });
+  const ruw = await bronnen({ bezit: bezitVan(await db.loadState()), focus: [...(agenda || []).map(k => k.asset), ...(spoed?.assets || [])], nu });
   ruw.fouten.forEach(f => log('⚠ bron mislukt:', f));
   if (spoed && !ruw.nieuws.some(n => n.url === spoed.url)) ruw.nieuws.unshift(spoed);
   if (!ruw.koersen.length) { await vg.stop(); throw new Error('Geen enkele koers opgehaald, ronde afgebroken.'); }
@@ -47,6 +49,14 @@ export async function ronde({ db = maakDb(), bronnen = verzamelBronnen, llm = ll
   await db.upsertMarket(marktRows);
   const radar = kiesRadar(ruw, await db.loadState(), spoed, agenda);
   const pakket = maakPakket(ruw, ind, radar);
+  // De voorspeller als bron in het debat, maar alleen als hij zich bewezen heeft
+  let voorspeller = { aan: false }, openVoorspellingen = [];
+  try {
+    if (db.alleNagekeken) {
+      voorspeller = voorspellerStatus(await db.alleNagekeken());
+      if (voorspeller.aan) { openVoorspellingen = await db.openVoorspellingen(); pakket.push(...voorspelBronnen(openVoorspellingen, pakket.length + 1, nu)); }
+    }
+  } catch (e) { log('⚠ voorspeller-status mislukt:', e.message); }
   log(`bronnenpakket: ${pakket.length} bronnen (${ruw.nieuws.length} nieuws), radar: ${radar.join(' ')}`);
 
   // 3. Portefeuille laden, oude stemmen beoordelen
@@ -118,10 +128,11 @@ export async function ronde({ db = maakDb(), bronnen = verzamelBronnen, llm = ll
   const msg = (phase, extra) => ({ round_id: round.id, seq: ++seq, phase, created_at: new Date().toISOString(), sources: [], ...extra });
   // Vangnetten eerst: stop-loss en winstdoel (zonder debat)
   for (const v of vangnetten(staat, prijzen, nu)) {
-    await db.insertTrade({ round_id: round.id, t: nu.toISOString(), actie: 'VERKOOP', asset: v.asset, bedrag: v.bedrag, prijs: v.prijs, qty: v.qty, fee: v.fee, votes_for: null });
-    await db.insertMessages([msg('systeem', { text: `${v.reden === 'stop-loss' ? 'Stop-loss' : 'Winstdoel'}: ${v.asset} automatisch verkocht voor €${v.bedrag} (${(v.resultaat * 100).toFixed(1)}%).`, action: { vangnet: v.reden, asset: v.asset } })]);
-    log(`vangnet ${v.reden}: ${v.asset} verkocht`);
-    await push({ titel: v.reden === 'stop-loss' ? `${v.asset} verkocht met verlies` : `${v.asset} verkocht met winst`, tekst: v.reden === 'stop-loss' ? `De koers zakte ${Math.abs(v.resultaat * 100).toFixed(0)}%. We hebben automatisch verkocht zodat het verlies niet groter wordt.` : `De koers steeg ${(v.resultaat * 100).toFixed(0)}%. We hebben de winst automatisch binnengehaald.`, prio: 4 });
+    await db.insertTrade({ round_id: round.id, t: nu.toISOString(), actie: v.actie, asset: v.asset, bedrag: v.bedrag, prijs: v.prijs, qty: v.qty, fee: v.fee, votes_for: null });
+    const vt = vangnetTekst(v);
+    await db.insertMessages([msg('systeem', { text: vt.systeem, action: { vangnet: v.reden, asset: v.asset, soort: v.soort } })]);
+    log(`vangnet ${v.reden}: ${v.asset} (${v.soort})`);
+    await push({ titel: vt.titel, tekst: vt.tekst, prio: 4 });
   }
   if (spoed) {
     const zin = await simpelNieuws(llm, spoed.titel);
@@ -240,13 +251,15 @@ export async function ronde({ db = maakDb(), bronnen = verzamelBronnen, llm = ll
       if (voor >= nodig) {
         // Het bedrag bepalen de voorstemmers samen: het middelste bedrag (mediaan) van wat zij verstandig vinden
         const bp = bedragUitStemmen(stemmen, voorstel);
-        const uitTeVoeren = { ...voorstel, bedrag: voorstel.actie === 'KOOP' ? bp.bedrag : voorstel.bedrag };
+        const zeker = voorspeller.aan ? zekerheidFactor(voorstel, openVoorspellingen.find(v => v.asset === voorstel.asset && new Date(v.tot) > nu)) : { factor: 1 };
+        const uitTeVoeren = { ...voorstel, bedrag: ['KOOP', 'SHORT'].includes(voorstel.actie) ? Math.round(bp.bedrag * zeker.factor / 5) * 5 : voorstel.bedrag };
+        if (zeker.uitleg) await db.insertMessages([msg('systeem', { text: `Inzet naar zekerheid: ${zeker.uitleg} (€${bp.bedrag} → €${uitTeVoeren.bedrag}).`, action: { zekerheid: zeker.factor } })]);
         const r = voerUit(uitTeVoeren, staat, prijzen, nu);
         if (r.ok) {
           uitkomst = 'UITGEVOERD'; trade = r;
           await db.insertTrade({ round_id: round.id, t: nu.toISOString(), actie: r.actie, asset: r.asset, bedrag: r.bedrag, prijs: r.prijs, qty: r.qty, fee: r.fee, votes_for: voor });
-          await db.insertMessages([msg('uitslag', { trader_id: 'voorzitter', text: `Aangenomen met ${voor} van ${actief.length}. ${r.actie} €${r.bedrag} ${r.asset} uitgevoerd${bp.bron === 'stemmers' && voorstel.actie === 'KOOP' ? ` (bedrag: het middelste van de voorstemmers, die zaten tussen €${bp.spreiding[0]} en €${bp.spreiding[1]})` : ''}${r.opgehoogd ? `, opgehoogd naar het minimum vanwege de vaste kosten` : ''}.`, action: { uitkomst, voor, bedrag: r.bedrag, voorgesteld: voorstel.bedrag } })]);
-          tradeMelding = { titel: `${r.actie === 'KOOP' ? 'Gekocht' : 'Verkocht'}: ${r.asset} voor €${Math.round(r.bedrag)}`, tekst: `${voor} van de ${actief.length} traders stemden voor.`, prio: 4 };
+          await db.insertMessages([msg('uitslag', { trader_id: 'voorzitter', text: `Aangenomen met ${voor} van ${actief.length}. ${r.actie} €${r.bedrag} ${r.asset} uitgevoerd${bp.bron === 'stemmers' && ['KOOP', 'SHORT'].includes(voorstel.actie) ? ` (bedrag: het middelste van de voorstemmers, die zaten tussen €${bp.spreiding[0]} en €${bp.spreiding[1]})` : ''}${r.opgehoogd ? `, opgehoogd naar het minimum vanwege de vaste kosten` : ''}.`, action: { uitkomst, voor, bedrag: r.bedrag, voorgesteld: voorstel.bedrag } })]);
+          tradeMelding = { titel: `${{ KOOP: 'Gekocht', VERKOOP: 'Verkocht', SHORT: 'Short gegaan', DEKKEN: 'Short gesloten' }[r.actie] || r.actie}: ${r.asset} voor €${Math.round(r.bedrag)}`, tekst: `${voor} van de ${actief.length} traders stemden voor.`, prio: 4 };
         } else {
           uitkomst = 'HUISREGEL';
           await db.insertMessages([msg('uitslag', { trader_id: 'voorzitter', text: `Aangenomen met ${voor} stemmen, maar geblokkeerd: ${r.reden}.`, action: { uitkomst, voor } })]);
@@ -303,7 +316,7 @@ export function kiesRadar(ruw, staat, spoed, agenda = null) {
   const lijst = [];
   const voeg = s => { if (beschikbaar.has(s) && !lijst.includes(s) && lijst.length < RADAR_MAX) lijst.push(s); };
   (agenda || []).map(k => k.asset).forEach(voeg);
-  Object.keys(staat?.positions || {}).forEach(voeg);
+  bezitVan(staat).forEach(voeg);
   (spoed?.assets || []).forEach(voeg);
   ruw.nieuws.slice().sort((a, b) => b.belang - a.belang).flatMap(n => n.assets || []).forEach(voeg);
   (ruw.cijfers || []).filter(c => (new Date(c.datum) - Date.now()) < 2 * 864e5).forEach(c => voeg(c.sym));   // cijfers binnen 2 dagen

@@ -1,7 +1,7 @@
 // Koersen in de tabel 'market' zetten. Wordt gebruikt door de zitting, de uurcheck (elk uur)
 // en de nieuwsreflex (elke 5 minuten, alleen de prijzen die je bezit plus crypto), zodat de app altijd verse koersen toont.
 import { CONFIG, vindAsset } from './config.js';
-import { indicatoren, round2, waarde, benchWaarde } from './portfolio.js';
+import { indicatoren, round2, waarde, benchWaarde, bezitVan } from './portfolio.js';
 import { fetchBitvavo, fetchStocks, fetchUsdEur } from './sources.js';
 import { beursOpen, env } from './config.js';
 
@@ -33,7 +33,7 @@ export async function snapshotNu(db, staat, nu = new Date()) {
 export async function verversPrijzen(db, { nu = new Date(), usdEur = 0.93 } = {}) {
   const staat = await db.loadState();
   const markt = Object.fromEntries((await db.loadMarket()).map(m => [m.symbol, m]));
-  const bezit = Object.keys(staat?.positions || {});
+  const bezit = bezitVan(staat);
   const nieuw = [];
   try {
     const bv = await fetchBitvavo();

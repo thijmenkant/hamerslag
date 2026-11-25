@@ -14,6 +14,15 @@ export const CONFIG = {
   slippageKlein: 0.003,         // +0,3% extra bij kleine munten (crypto buiten de top 20)
   stopLoss: -0.08,              // automatisch verkopen bij -8% op een positie
   winstDoel: 0.15,              // automatisch winst pakken bij +15%
+  stopGrenzen: [-0.15, -0.03],  // traders mogen zelf een stop-loss kiezen tussen -15% en -3%
+  doelGrenzen: [0.05, 0.40],    // en een winstdoel tussen +5% en +40%
+  vastzettenVanaf: 0.10,        // staat een positie ooit +10%, dan schuift de stop-loss naar 0% (winst vastzetten)
+  maxPerShort: 0.15,            // short gaan: max 15% van de totale waarde per short
+  maxShortTotaal: 0.30,         // en max 30% in alle shorts samen
+  wedpot: 100,                  // wedden op Polymarket: aparte pot uit het startkapitaal
+  maxPerWed: 20,                // max €20 per weddenschap
+  maxOpenWedden: 5,             // max 5 weddenschappen tegelijk
+  wedVerschil: 0.10,            // alleen wedden als we minstens 10 procentpunt anders denken dan de markt
   maxPerAsset: 0.25,            // max 25% van totale waarde per asset
   minTrade: 10,                 // minimaal €10 per trade (crypto)
   minTradeAandeel: 50,          // aandelen en ETF's: minimaal €50, zodat de vaste orderkosten niet te zwaar wegen

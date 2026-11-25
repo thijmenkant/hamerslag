@@ -27,10 +27,10 @@ Belangrijk:
 - Koersen van aandelen en fondsen zijn in dollars.
 
 Geef ALLEEN JSON, zonder aanhalingstekens binnen je teksten:
-{"waarom": "1 tot 2 zinnen: waarom ${uitkomst === 'UITGEVOERD' ? (voorstel.actie === 'KOOP' ? 'we dit gekocht hebben' : 'we dit verkocht hebben') : 'het voorstel is afgewezen'}, met het belangrijkste argument",
+{"waarom": "1 tot 2 zinnen: waarom ${uitkomst === 'UITGEVOERD' ? ({ KOOP: 'we dit gekocht hebben', VERKOOP: 'we dit verkocht hebben', SHORT: 'we hierop short zijn gegaan (inzetten op een daling)', DEKKEN: 'we deze short hebben gesloten' }[voorstel.actie] || 'we dit gedaan hebben') : 'het voorstel is afgewezen'}, met het belangrijkste argument",
  "verwachting": "1 tot 2 zinnen: wat we verwachten dat er de komende dagen of weken met deze koers gebeurt, en waarom. Wees eerlijk over onzekerheid",
  "melding": "1 korte zin van hoogstens 15 woorden voor een pushmelding: de kern van waarom, simpel",
- "plan": "1 zin: ${uitkomst === 'UITGEVOERD' && voorstel.actie === 'KOOP' ? 'wanneer we verkopen (met de huisregels) of opnieuw kijken' : 'wanneer of onder welke voorwaarde we er opnieuw naar kijken'}"}`;
+ "plan": "1 zin: ${uitkomst === 'UITGEVOERD' && ['KOOP', 'SHORT'].includes(voorstel.actie) ? 'wanneer we verkopen of dekken (met de stop-loss en het winstdoel) of opnieuw kijken' : 'wanneer of onder welke voorwaarde we er opnieuw naar kijken'}"}`;
 }
 
 export async function maakUitleg(llm, info) {

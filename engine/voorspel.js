@@ -73,6 +73,7 @@ ${koppen.map(k => `- ${k.title} (${k.publisher || 'nieuws'})`).join('\n') || '- 
 WEDMARKTEN (Polymarket: kansen waar mensen met echt geld op wedden, de beste schatting van de massa voor toekomstige gebeurtenissen):
 ${wedmarkten.map(wedRegel).join('\n') || '- (niet beschikbaar)'}
 Gebruik deze kansen als startpunt voor je scenario's. Wijk je af, leg dan uit waarom. Zet dan 'Polymarket' bij de bronnen.
+WEDDEN: we hebben een wedpot met nepgeld. Denk je bij een wedmarkt hierboven met een goede, concrete reden dat de kans MINSTENS 10 procentpunt anders is dan de markt zegt, zet hem dan bij "weddenschappen". Meestal heeft de massa gelijk: wed alleen als je echt iets ziet wat de markt mist, liever geen weddenschap dan een gok. Hooguit 2 per dag.
 
 AGENDA KOMENDE 7 DAGEN:
 ${agenda.map(a => `- ${a.datum}: ${a.tekst}`).join('\n') || '- (niets bekend)'}
@@ -85,11 +86,26 @@ Geef ALLEEN JSON, in gewoon Nederlands voor een student zonder beleggingskennis,
  "themas": [{"onderwerp": "kort: de gebeurtenis (bijv. oorlog, president, CEO-wissel, rente)", "keten": ["gebeurtenis", "direct gevolg", "gevolg voor geld of vraag", "welke markt beweegt"], "winnaars": ["TICKER"], "verliezers": ["TICKER"], "ingeprijsd": "1 korte zin: is dit al in de koers verwerkt?", "tegen": "1 korte zin: wat kan de keten breken", "effect": "1 zin samenvatting"}],
  "vooruit": [{"gebeurtenis": "kort: wat komt eraan", "datum": "YYYY-MM-DD of leeg als onbekend", "soort": "agenda|signaal", "verwachting": "1 zin: wat de markt nu al verwacht", "scenarios": [{"als": "kort: wat er gebeurt", "kans": 0-100, "keten": ["stap", "stap", "markt beweegt"], "winnaars": ["TICKER"], "verliezers": ["TICKER"]}], "vooraf": "1 zin: wat er al beweegt voor het zover is", "wedmarkt": "als er een wedmarkt over gaat: kort de vraag en de kans, anders leeg"}],
  "voorspellingen": [{"thema": "nummer van het thema waar dit uit komt, vanaf 0", "vooruit": "of: nummer van de aankomende gebeurtenis waar dit uit komt, vanaf 0", "asset": "TICKER uit de lijst hierboven", "richting": "OP|NEER|GELIJK", "kans": 50-85, "dagen": 1-7, "reden": "1 tot 2 zinnen waarom, en wat het kan omgooien", "bronnen": ["korte naam van 1 tot 3 bronnen, bijv. Agenda, Nieuws, Angstmeter, RSI"]}],
+ "weddenschappen": [{"markt": "W-nummer uit de lijst, bijv. W3", "uitkomst": "JA|NEE", "onzeKans": "0-100: jouw kans dat het antwoord JA is", "reden": "1 zin: wat de markt volgens jou mist"}],
  "agenda": [{"datum": "YYYY-MM-DD", "tekst": "korte uitleg in gewone taal van een belangrijke gebeurtenis uit de agenda hierboven"}]}
 3 tot 5 voorspellingen, verschillende assets, waar het kan ook grondstoffen (GLD goud, SLV zilver, USO olie, UNG gas, CPER koper, DBA landbouw). Thema's: 2 tot 4, alleen uit het nieuws en de agenda hierboven, niets verzinnen; elke stap in de keten hooguit 8 woorden. Vooruit: 1 tot 3 aankomende gebeurtenissen, elk met precies 2 scenario's waarvan de kansen samen 100 zijn; minstens 1 voorspelling komt uit een aankomende gebeurtenis als die er is. Agenda: hoogstens 5 punten, alleen uit de agenda hierboven.`;
 }
 
 // Een voorspelling netjes maken (of weggooien als hij niet klopt)
+// Wedvoorstellen controleren: bestaande markt, genoeg verschil met de markt, in de goede richting
+export function kiesWedden(raw, wedmarkten) {
+  const uit = [];
+  for (const w of Array.isArray(raw) ? raw : []) {
+    const i = Number(String(w?.markt || '').replace(/\D/g, '')) - 1, m = wedmarkten[i];
+    const uitkomst = String(w?.uitkomst || '').toUpperCase(), onze = Math.max(0, Math.min(100, Math.round(Number(w?.onzeKans))));
+    if (!m?.id || !['JA', 'NEE'].includes(uitkomst) || !Number.isFinite(onze) || uit.some(x => x.id === m.id)) continue;
+    const verschil = uitkomst === 'JA' ? onze - m.kans : m.kans - onze;
+    if (verschil < CONFIG.wedVerschil * 100) continue;
+    uit.push({ id: m.id, slug: m.slug, vraag: m.vraag, einde: m.einde, uitkomst, onzeKans: onze, marktKans: m.kans, verschil, reden: String(w.reden || '').slice(0, 200) });
+  }
+  return uit.slice(0, 2);
+}
+
 export function schoonVoorspelling(v, markt, nu) {
   const m = markt.find(x => x.symbol === String(v.asset || '').toUpperCase());
   if (!m || !(Number(m.price) > 0) || !RICHTINGEN.includes(v.richting)) return null;
@@ -185,12 +201,52 @@ export async function dagvoorspelling({ db, llm, nu = new Date(), forceer = fals
 
   // kosten meetellen in de kostenmeter (vers geladen staat, zodat er niets overschreven wordt)
   const extra = (llm.verbruik?.usd || 0) - usdStart;
-  if (extra > 0 && db.saveState) {
+  const wedVoorstel = kiesWedden(j.weddenschappen, wedmarkten);
+  if ((extra > 0 || wedVoorstel.length) && db.saveState) {
     const st = await db.loadState();
-    if (st?.kosten) { st.kosten.usd = (st.kosten.usd || 0) + extra; st.kosten.eur = Math.round(st.kosten.usd * (st.kosten.usdEur || 0.93) * 100) / 100; await db.saveState(st); }
+    if (st) {
+      if (st.kosten && extra > 0) { st.kosten.usd = (st.kosten.usd || 0) + extra; st.kosten.eur = Math.round(st.kosten.usd * (st.kosten.usdEur || 0.93) * 100) / 100; }
+      st.wedVoorstellen = { datum, lijst: wedVoorstel };   // de wedronde in de nieuwscheck plaatst ze
+      await db.saveState(st);
+    }
   }
   await db.insertDagvoorspelling({ datum, t: nu.toISOString(), stemming: String(j.stemming || '').slice(0, 400), agenda, themas, vooruit });
   await db.insertVoorspellingen(uniek.map(v => ({ ...v, datum, t: nu.toISOString() })));
   log(`dagvoorspelling ${datum}: ${uniek.map(v => `${v.asset} ${v.richting} ${v.kans}%`).join(', ')}`);
   return { gemaakt: true, datum, voorspellingen: uniek };
+}
+
+// ---------- de voorspeller in het debat (gaat pas aan als hij zich bewezen heeft) ----------
+export const BEWIJS = { minNagekeken: 40, marge: 0.03 };
+
+// Status uit de nagekeken voorspellingen: genoeg gemeten, en beter dan de basiskans?
+export function voorspellerStatus(nagekeken) {
+  const k = (nagekeken || []).filter(v => v.uitkomst);
+  const metBasis = k.filter(v => v.basiskans != null);
+  const tref = k.length ? k.filter(v => v.uitkomst === 'goed').length / k.length : null;
+  const basis = metBasis.length ? metBasis.reduce((a, v) => a + Number(v.basiskans), 0) / metBasis.length / 100 : null;
+  const trefBasis = metBasis.length ? metBasis.filter(v => v.uitkomst === 'goed').length / metBasis.length : null;
+  const aan = metBasis.length >= BEWIJS.minNagekeken && trefBasis >= basis + BEWIJS.marge;
+  return { aan, n: metBasis.length, nodig: BEWIJS.minNagekeken, trefkans: tref, trefBasis, basis };
+}
+
+// Inzet naar zekerheid: past de voorspelling bij het voorstel, dan meer; spreekt hij het tegen, dan minder.
+export function zekerheidFactor(voorstel, voorspelling) {
+  if (!voorspelling || !['KOOP', 'SHORT'].includes(voorstel.actie)) return { factor: 1 };
+  const eens = (voorstel.actie === 'KOOP' && voorspelling.richting === 'OP') || (voorstel.actie === 'SHORT' && voorspelling.richting === 'NEER');
+  const tegen = (voorstel.actie === 'KOOP' && voorspelling.richting === 'NEER') || (voorstel.actie === 'SHORT' && voorspelling.richting === 'OP');
+  if (tegen) return { factor: 0.5, uitleg: `de voorspeller verwacht het tegenovergestelde (${voorspelling.richting} ${voorspelling.kans}%), dus de helft` };
+  if (!eens) return { factor: 1 };
+  const voorsprong = (voorspelling.kans - (voorspelling.basiskans ?? 50)) / 100;
+  const factor = Math.round(Math.min(1.5, Math.max(1, 1 + voorsprong * 5)) * 100) / 100;   // +10 punten boven de basiskans = 1,5x
+  return { factor, uitleg: factor > 1 ? `de voorspeller is het eens (${voorspelling.kans}%, normaal ${voorspelling.basiskans ?? 50}%), dus ${factor}x` : null };
+}
+
+// Bronnen voor het pakket: de open voorspellingen van de laatste 2 dagen
+export function voorspelBronnen(open, startId, nu = new Date()) {
+  return (open || []).filter(v => !v.uitkomst && new Date(v.tot) > nu && (nu - new Date(v.t || v.datum)) < 2 * 864e5).slice(0, 6).map((v, i) => ({
+    id: `B${startId + i}`, kind: 'voorspelling', publisher: 'Hamerslag-voorspeller (bewezen beter dan de basiskans)',
+    title: `${v.naam || v.asset} (${v.asset}) ${v.richting === 'OP' ? 'stijgt' : v.richting === 'NEER' ? 'daalt' : 'blijft gelijk'} tot ${String(v.tot).slice(0, 10)}: ${v.kans}% kans (normaal ${v.basiskans ?? '?'}%). ${v.reden}`,
+    url: 'https://hamerslag.vercel.app/#voorspel', published_at: v.t || new Date().toISOString(), data: { asset: v.asset, richting: v.richting, kans: v.kans, basiskans: v.basiskans },
+  }));
 }

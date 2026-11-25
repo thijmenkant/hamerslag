@@ -79,4 +79,19 @@ assert.ok(beursAgenda(new Date('2026-12-07T13:00:00Z'), 7).some(a => a.tekst.inc
 const eerste = db.data.voorspellingen.find(v => v.asset === 'SPY' && v.datum === '2026-11-25');
 assert.ok(eerste.basiskans >= 60 && eerste.basiskans <= 100, `basiskans opgeslagen (${eerste.basiskans})`);
 assert.ok(prompt.includes('dag-RSI') && prompt.includes('basiskans 5 handelsdagen') && prompt.includes('Fed verlaagt de rente in december?: 30% kans'), 'dagcijfers en wedmarkten in de opdracht');
+// de voorspeller in het debat: pas aan als hij bewezen beter is dan de basiskans
+{ const { voorspellerStatus, zekerheidFactor, voorspelBronnen } = await import('../voorspel.js');
+  const rij = (goed, n, basis = 55) => Array.from({ length: n }, (_, i) => ({ uitkomst: i < goed ? 'goed' : 'fout', basiskans: basis }));
+  assert.equal(voorspellerStatus(rij(30, 39)).aan, false, 'te weinig gemeten');
+  assert.equal(voorspellerStatus(rij(23, 40)).aan, false, '57,5% is niet 3 punten beter dan 55%');
+  const st = voorspellerStatus(rij(24, 40));
+  assert.equal(st.aan, true, '60% tegen 55% = aan'); assert.equal(st.n, 40);
+  const vs = { asset: 'NVDA', richting: 'OP', kans: 65, basiskans: 55 };
+  assert.equal(zekerheidFactor({ actie: 'KOOP' }, vs).factor, 1.5, '10 punten boven de basiskans = 1,5x');
+  assert.equal(zekerheidFactor({ actie: 'KOOP' }, { ...vs, kans: 57 }).factor, 1.1);
+  assert.equal(zekerheidFactor({ actie: 'SHORT' }, vs).factor, 0.5, 'voorspeller zegt het tegenovergestelde');
+  assert.equal(zekerheidFactor({ actie: 'VERKOOP' }, vs).factor, 1);
+  const b = voorspelBronnen([{ ...vs, naam: 'Nvidia', reden: 'x', tot: '2026-11-30T21:00:00Z', t: '2026-11-25T13:00:00Z' }, { ...vs, tot: '2026-11-20T21:00:00Z' }], 7, new Date('2026-11-25T15:00:00Z'));
+  assert.equal(b.length, 1); assert.equal(b[0].id, 'B7'); assert.equal(b[0].kind, 'voorspelling');
+}
 console.log('✅ Dagvoorspelling werkt: 1x per dag na 14:00, binnen de regels (50-85%, max 7 dagen), kosten geteld, en na afloop nagekeken.');

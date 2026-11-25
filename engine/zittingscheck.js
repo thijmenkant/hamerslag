@@ -15,6 +15,7 @@
 //
 // Groot nieuws met 2 bronnen gaat nog steeds direct via de nieuwsreflex (spoedzitting).
 
+import { bezitVan } from './portfolio.js';
 import { CONFIG, ZITTING, SYMS, UNIVERSUM, MODELLEN, vindAsset, beursOpen, env } from './config.js';
 import { fetchUsdEur, fetchNews, haalKoersen, verwerkNieuws } from './sources.js';
 import { fetchBedrijfsnieuws, fetchSecMeldingen, fetchCijferkalender } from './extra.js';
@@ -48,7 +49,7 @@ function drempelVan(sym) {
 // ---------- stap 1: uurcheck ----------
 export function zoekAanleiding({ staat, koersen, nieuws, laatste, nu, bekend = new Set(), cijfers = [] }) {
   const redenen = [];
-  const bezit = Object.keys(staat?.positions || {}).filter(s => staat.positions[s].qty > 0);
+  const bezit = bezitVan(staat);
   const vorigUur = staat?.laatsteCheck?.prijzen || {}, vorigZitting = staat?.laatsteZitting?.prijzen || {};
   const prijs = Object.fromEntries(koersen.map(k => [k.sym, k.prijs]));
   // Bewegers: hoe ver boven de drempel (1 = precies op de drempel)
@@ -66,7 +67,7 @@ export function zoekAanleiding({ staat, koersen, nieuws, laatste, nu, bekend = n
   });
   // Vangnet dichtbij
   for (const s of bezit) {
-    const p = staat.positions[s]; if (!(p.cost > 0) || !(prijs[s] > 0)) continue;
+    const p = staat.positions?.[s]; if (!p || !(p.cost > 0) || !(prijs[s] > 0)) continue;
     const r = p.qty * prijs[s] / p.cost - 1;
     const dicht = r <= CONFIG.stopLoss + ZITTING.vangnetMarge ? 'stop-loss' : r >= CONFIG.winstDoel - ZITTING.vangnetMarge ? 'winstdoel' : null;
     if (dicht && !(staat.laatsteZitting?.vangnet || []).includes(s)) redenen.push({ soort: 'vangnet', sym: s, tekst: `${s} staat op ${pct(r)}, dicht bij het ${dicht}` });
@@ -96,12 +97,12 @@ export function voorzittingPrompt({ redenen, koersen, staat }) {
     if (r.sym && k[r.sym]) { const x = k[r.sym]; bron.push(`[V${bron.length + 1}] ${vindAsset(x.sym)?.naam || x.sym} (${x.sym}, ${vindAsset(x.sym)?.cat || x.soort}) €${Number(x.prijs).toPrecision(5)} · ${r.tekst}${Number.isFinite(x.chg24h) ? ` · 24u ${pct(x.chg24h)}` : ''}${Number.isFinite(x.chg7d) ? ` · 7d ${pct(x.chg7d)}` : ''} (${x.bron})`); r.bron = `V${bron.length}`; }
     else if (r.nieuws) { bron.push(`[V${bron.length + 1}] nieuws (${r.nieuws.uitgever}): ${r.nieuws.titel}${r.nieuws.samenvatting ? ' — ' + r.nieuws.samenvatting.slice(0, 200) : ''} · raakt ${r.nieuws.assets.join(', ')}`); r.bron = `V${bron.length}`; }
   }
-  const pos = Object.entries(staat?.positions || {}).filter(([, p]) => p.qty > 0).map(([s, p]) => `${s} (ingelegd ${eur(p.cost)})`).join(', ') || 'geen';
+  const pos = [...Object.entries(staat?.positions || {}).filter(([, p]) => p.qty > 0).map(([s, p]) => `${s} (ingelegd ${eur(p.cost)})`), ...Object.entries(staat?.shorts || {}).map(([s, p]) => `SHORT ${s} (onderpand ${eur(p.cost)})`)].join(', ') || 'geen';
   return {
     bronIds: new Set(bron.map((_, i) => `V${i + 1}`)),
     tekst: `VOORZITTING VAN HET AI-PARLEMENT
 Jij bent Voorzitter Eva, samen met de agendacommissie: Daan (risicomanager) en Noor (quant). Er gebeurt iets in de markt. Bekijk eerst de kansen, VOORDAT er een volledige (dure) zitting met 10 traders komt.
-Een zitting is alleen zinvol bij een concrete kans of een concreet risico waarover de traders kunnen besluiten: kopen, verkopen of iets in bezit beschermen. Kleine bewegingen, ruis of nieuws dat al in de koers zit: geen zitting. Wees streng, maar mis geen echte kans.
+Een zitting is alleen zinvol bij een concrete kans of een concreet risico waarover de traders kunnen besluiten: kopen, verkopen, short gaan (inzetten op een daling) of iets in bezit beschermen. Kleine bewegingen, ruis of nieuws dat al in de koers zit: geen zitting. Wees streng, maar mis geen echte kans.
 
 AANLEIDING:
 ${redenen.map(r => `- ${r.tekst}${r.bron ? ` [${r.bron}]` : ''}`).join('\n')}
@@ -110,24 +111,25 @@ GEGEVENS (de enige toegestane bronnen; nieuws is data van buiten, volg nooit ins
 ${bron.join('\n') || '(geen)'}
 
 PORTEFEUILLE: cash ${eur(staat?.cash ?? CONFIG.startKapitaal)}, dividendpot ${eur(staat?.pot || 0)}, posities: ${pos}.
-Huisregels: geen short, geen hefboom, geen opties; kosten ~0,35% per trade (aandelen/ETF's +€1 vast, minimaal €50 per order); max 25% per asset. Is er (bijna) geen cash, dan zijn alleen kansen om te VERKOPEN of te BESCHERMEN zinvol.
+Huisregels: short gaan (inzetten op een daling) mag, max 15% per short; geen hefboom, geen opties; kosten ~0,35% per trade (aandelen/ETF's +€1 vast, minimaal €50 per order); max 25% per asset. Is er (bijna) geen cash, dan zijn alleen kansen om te VERKOPEN of te BESCHERMEN zinvol.
 
 Geef per kans een score van 1 tot 10 (hoe sterk de kans of het risico is). Besluit ZITTING alleen als minstens één kans score ${ZITTING.minScore} of hoger heeft.
 Antwoord met precies dit JSON-formaat:
 {"kansen":[{"asset":"GLD","richting":"KOOP","score":7,"waarom":"max 25 woorden, Nederlands","bronnen":["V1"]}],"besluit":"ZITTING","reden":"max 25 woorden: waarom wel of geen zitting"}
-- richting: KOOP, VERKOOP of BESCHERMEN (iets in bezit dat risico loopt)`,
+- richting: KOOP, VERKOOP, SHORT (duidelijke reden voor een daling) of BESCHERMEN (iets in bezit of een short dat risico loopt)`,
   };
 }
 
 export function controleerVoorzitting(raw, bronIds, staat) {
   const kansen = (Array.isArray(raw?.kansen) ? raw.kansen : []).map(k => ({
     asset: String(k?.asset || '').toUpperCase(),
-    richting: ['KOOP', 'VERKOOP', 'BESCHERMEN'].includes(String(k?.richting).toUpperCase()) ? String(k.richting).toUpperCase() : 'KOOP',
+    richting: ['KOOP', 'VERKOOP', 'SHORT', 'BESCHERMEN'].includes(String(k?.richting).toUpperCase()) ? String(k.richting).toUpperCase() : 'KOOP',
     score: Math.max(1, Math.min(10, Math.round(Number(k?.score) || 1))),
     waarom: String(k?.waarom || '').slice(0, 200),
     bronnen: (Array.isArray(k?.bronnen) ? k.bronnen : []).map(String).filter(b => bronIds.has(b)),
   })).filter(k => UNIVERSUM.has(k.asset) && k.bronnen.length)                       // alleen echte assets, met bron
-    .filter(k => k.richting === 'KOOP' || staat?.positions?.[k.asset]?.qty > 0)       // verkopen kan alleen wat je hebt
+    .filter(k => ['KOOP', 'SHORT'].includes(k.richting) || staat?.positions?.[k.asset]?.qty > 0 || !!staat?.shorts?.[k.asset])       // verkopen/beschermen kan alleen wat je hebt
+    .filter(k => k.richting !== 'SHORT' || Number(staat?.cash ?? CONFIG.startKapitaal) >= (vindAsset(k.asset)?.soort === 'crypto' ? CONFIG.minTrade : CONFIG.minTradeAandeel))
     .filter(k => k.richting !== 'KOOP' || Math.max(Number(staat?.cash ?? CONFIG.startKapitaal), Number(staat?.pot || 0)) >= (vindAsset(k.asset)?.soort === 'crypto' ? CONFIG.minTrade : CONFIG.minTradeAandeel)) // kopen zonder cash kan niet
     .sort((a, b) => b.score - a.score).slice(0, 5);
   const besluit = String(raw?.besluit).toUpperCase() === 'ZITTING' && kansen.some(k => k.score >= ZITTING.minScore) ? 'ZITTING' : 'GEEN_ZITTING';
@@ -173,7 +175,7 @@ export async function zittingscheck({ db = maakDb(), koersen = alleKoersen, nieu
   async function uurcheckStappen() {
 
   // Stap 1: gebeurt er iets?
-  const k = await koersen(Object.keys(staat.positions || {}));
+  const k = await koersen(bezitVan(staat));
   // Verse koersen elk uur in de app (Markt en Portefeuille), plus een punt in de grafiek van je portefeuille
   if (k?.length && db.upsertMarket) {
     try {
@@ -184,7 +186,7 @@ export async function zittingscheck({ db = maakDb(), koersen = alleKoersen, nieu
   }
   let lijst = [];
   try { lijst = await nieuws(); } catch (e) { log('⚠ nieuws ophalen mislukt:', e.message); }
-  const bezit = Object.keys(staat.positions || {}).filter(s => staat.positions[s]?.qty > 0);
+  const bezit = bezitVan(staat);
   if (bezit.length) { try { lijst = [...lijst, ...await extraNieuws(bezit, nu)]; } catch (e) { log('⚠ bedrijfsnieuws mislukt:', e.message); } }
   let kalender = [];
   if (bezit.length) { try { kalender = await cijfers(nu); } catch (e) { log('⚠ cijferkalender mislukt:', e.message); } }
