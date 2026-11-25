@@ -50,4 +50,7 @@ assert.equal(ingehaald, 1, 'wel na minuut 4 als de check van dit uur ontbreekt')
 await db4.saveState({ cash: 1000, positions: {}, laatsteCheck: { t: '2026-11-24T10:05:00Z' } });
 await nieuwscheck({ db: db4, start, nu: new Date('2026-11-24T10:10:00Z'), nieuws: async () => [], inhalen });
 assert.equal(ingehaald, 1, 'niet als hij net gedaan is');
+await db4.saveState({ cash: 1000, positions: {}, laatsteCheck: { t: '2026-11-24T10:00:30Z' } });
+await nieuwscheck({ db: db4, start, nu: new Date('2026-11-24T10:55:00Z'), nieuws: async () => [], inhalen });
+assert.equal(ingehaald, 1, 'om :55 niet inhalen als de check van dit uur gewoon om :00 draaide');
 console.log('✅ Vragen aan de zaal werken: opgepakt binnen de nieuwsreflex, juiste focus (goud = GLD), wacht bij een lopende zitting, max', MAX_VRAGEN_PER_DAG, 'per dag.');

@@ -18,7 +18,8 @@ export async function nieuwscheck({ db = maakDb(), nieuws = () => fetchNews({ ma
   if (inhalen && nu.getUTCMinutes() >= 4) {
     const staat = await db.loadState().catch(() => null);
     const lc = staat?.laatsteCheck?.t;
-    if (staat?.cash != null && (!lc || nu - new Date(lc) >= 55 * 60000)) {
+    const beginUur = new Date(nu); beginUur.setUTCMinutes(0, 0, 0);
+    if (staat?.cash != null && (!lc || new Date(lc) < beginUur)) {   // de check van dít klokuur ontbreekt
       log(`nieuwscheck: de uurcheck van dit uur is nog niet gedaan (laatste ${lc ? Math.round((nu - new Date(lc)) / 60000) + ' min geleden' : 'nooit'}), nu inhalen`);
       const r = await inhalen({ db, start, nu });
       if (r?.reden !== 'net een zitting') return { ...r, ingehaald: true };
